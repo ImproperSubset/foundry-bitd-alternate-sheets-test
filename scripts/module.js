@@ -172,8 +172,7 @@ async function applyToothClick({ actor, attribute, value, timeoutMs = 1000 }) {
     updateTimedOut = true;
   });
 
-  input.checked = true;
-  input.dispatchEvent(new Event("change", { bubbles: true }));
+  input.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
   await updatePromise;
   await sheet.render(false);
   await new Promise((resolve) => setTimeout(resolve, 0));
