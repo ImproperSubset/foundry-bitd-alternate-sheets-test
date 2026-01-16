@@ -28,9 +28,16 @@
       {
         "id": "bitd-alternate-sheets",
         "type": "module"
+      },
+      {
+        "id": "quench",
+        "type": "module"
       }
     ],
     "conflicts": []
   },
-  "esmodules": ["scripts/module.js"]
+  "esmodules": [
+    "scripts/module.js",
+    "scripts/tests/teeth.test.js"
+  ]
 }
