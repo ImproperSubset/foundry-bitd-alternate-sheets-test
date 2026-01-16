@@ -1,12 +1,14 @@
 /**
  * Quench test batch for NPC integration.
- * Tests vice purveyors and NPC filtering by playbook.
+ * Tests vice purveyors via smart field dialogs.
  */
 
 import {
   createTestActor,
   ensureSheet,
   isTargetModuleActive,
+  testCleanup,
+  cleanupTestActors,
   closeAllDialogs,
 } from "../test-utils.js";
 
@@ -17,7 +19,7 @@ const TARGET_MODULE_ID = "bitd-alternate-sheets";
  * Create an NPC actor for testing.
  * @param {object} options
  * @param {string} options.name - NPC name
- * @param {string} options.associatedClass - Associated playbook class
+ * @param {string} options.associatedClass - Associated class (e.g., "Vice Purveyor")
  * @returns {Promise<Actor>}
  */
 async function createTestNPC({ name, associatedClass } = {}) {
@@ -33,73 +35,127 @@ async function createTestNPC({ name, associatedClass } = {}) {
 }
 
 /**
- * Find vice purveyor section on character sheet.
- * Vice purveyor is a smart-field inline in the character info area.
- * When in edit mode: .smart-field-label with data-field="flags.bitd-alternate-sheets.vice_purveyor"
- * When not in edit mode: .smart-field-value (check tooltip or position in DOM)
+ * Find the vice purveyor smart field element.
+ * In edit mode: span.smart-field-label with data-action="smart-edit" and data-field containing vice_purveyor
+ * In locked mode: span.smart-field-value (not clickable)
  * @param {HTMLElement} root
  * @returns {HTMLElement|null}
  */
-function findVicePurveyorSection(root) {
-  // In edit mode: has data-field attribute
+function findVicePurveyorSmartField(root) {
+  // Edit mode: clickable smart field
   const editModeEl = root.querySelector(
-    "[data-field='flags.bitd-alternate-sheets.vice_purveyor'], .smart-field-label[data-field*='vice_purveyor'], [data-action='smart-edit'][data-field*='vice']"
+    '[data-action="smart-edit"][data-field="flags.bitd-alternate-sheets.vice_purveyor"]'
   );
   if (editModeEl) return editModeEl;
 
-  // In read-only mode: smart-field-value elements near the vice field
-  // The vice purveyor is in the .bio-extras section after the vice field
-  const bioExtras = root.querySelector(".bio-extras");
-  if (bioExtras) {
-    // Look for smart-field-value elements - vice purveyor is the second one after vice
-    const smartFields = bioExtras.querySelectorAll(".smart-field-value");
-    // The bio-extras contains: heritage • background • vice • vice_purveyor
-    // Return any smart-field-value to indicate section exists
-    if (smartFields.length > 0) return smartFields[smartFields.length > 3 ? 3 : smartFields.length - 1];
-  }
-
-  // Fallback: look for any vice-related text in the character info area
-  const charInfo = root.querySelector(".char-info, .character-info");
-  if (charInfo) {
-    const smartFieldValues = charInfo.querySelectorAll(".smart-field-value");
-    if (smartFieldValues.length > 0) return smartFieldValues[0];
-  }
+  // Also try partial match
+  const partialMatch = root.querySelector(
+    '[data-action="smart-edit"][data-field*="vice_purveyor"]'
+  );
+  if (partialMatch) return partialMatch;
 
   return null;
 }
 
 /**
- * Find vice purveyor dropdown/select.
+ * Find the vice purveyor read-only display (locked mode).
  * @param {HTMLElement} root
  * @returns {HTMLElement|null}
  */
-function findVicePurveyorSelect(root) {
-  return root.querySelector(
-    "select.vice-purveyor, [name='system.vice.purveyor'], .purveyor-select"
-  );
+function findVicePurveyorDisplay(root) {
+  // In locked mode, look for smart-field-value elements in the bio-extras section
+  const bioExtras = root.querySelector(".bio-extras");
+  if (bioExtras) {
+    const smartFields = bioExtras.querySelectorAll(".smart-field-value");
+    // Vice purveyor is typically the last or near-last smart field in bio-extras
+    if (smartFields.length > 0) return smartFields[smartFields.length - 1];
+  }
+  return null;
 }
 
 /**
- * Get all purveyor options from dropdown.
- * @param {HTMLElement} selectEl
- * @returns {string[]}
+ * Find the card selection dialog (V1 or V2).
+ * @returns {HTMLElement|null}
  */
-function getPurveyorOptions(selectEl) {
-  if (!selectEl) return [];
-  return Array.from(selectEl.options || selectEl.querySelectorAll("option"))
-    .map((opt) => opt.textContent?.trim() || opt.value)
-    .filter(Boolean);
+function findSelectionDialog() {
+  // V2: native <dialog> element
+  const v2Dialog = document.querySelector("dialog[open] form.selection-dialog");
+  if (v2Dialog) return v2Dialog.closest("dialog");
+
+  // V1: Foundry Dialog application
+  const v1Dialog = document.querySelector(".dialog .selection-dialog");
+  if (v1Dialog) return v1Dialog.closest(".dialog");
+
+  // Alternative: look for any open dialog with selection content
+  const anyDialog = document.querySelector("dialog[open], .dialog.app");
+  if (anyDialog?.querySelector(".selection-dialog, .card-content")) return anyDialog;
+
+  return null;
 }
 
 /**
- * Find NPC items in a list context.
- * @param {HTMLElement} root
- * @returns {NodeListOf<HTMLElement>}
+ * Get dialog choice elements.
+ * @param {HTMLElement} dialog
+ * @returns {HTMLElement[]}
  */
-function findNPCItems(root) {
-  return root.querySelectorAll(
-    ".npc-item, .purveyor-item, [data-npc-id], .vice-purveyor-option"
-  );
+function getDialogChoices(dialog) {
+  // Choices are labels containing radio inputs
+  const radios = dialog.querySelectorAll('input[type="radio"][name="selectionId"]');
+  return Array.from(radios).map((r) => r.closest("label")).filter(Boolean);
+}
+
+/**
+ * Click the OK/confirm button in a dialog.
+ * @param {HTMLElement} dialog
+ * @returns {HTMLElement|null}
+ */
+function findDialogOkButton(dialog) {
+  // V2: button with data-action="ok"
+  const v2Button = dialog.querySelector('button[data-action="ok"]');
+  if (v2Button) return v2Button;
+
+  // V1: button.dialog-button with confirm class or label
+  const v1Button = dialog.querySelector(".dialog-button.confirm, button:has(.fa-check)");
+  if (v1Button) return v1Button;
+
+  // Fallback: first button that looks like confirm
+  return dialog.querySelector("button.confirm, button[type='submit']");
+}
+
+/**
+ * Find text input dialog (fallback when no chooser items available).
+ * @returns {HTMLElement|null}
+ */
+function findTextInputDialog() {
+  // V1 Dialog with text input
+  const v1Dialog = document.querySelector(".dialog.app form input[type='text'][name='value']");
+  if (v1Dialog) return v1Dialog.closest(".dialog.app");
+
+  // V2: native <dialog> with text input
+  const v2Dialog = document.querySelector("dialog[open] form input[type='text'][name='value']");
+  if (v2Dialog) return v2Dialog.closest("dialog");
+
+  return null;
+}
+
+/**
+ * Check if this is a card selection dialog (has radio buttons).
+ * @param {HTMLElement} dialog
+ * @returns {boolean}
+ */
+function isCardSelectionDialog(dialog) {
+  return dialog?.querySelector('input[type="radio"][name="selectionId"]') !== null;
+}
+
+/**
+ * Check if this is a text input dialog (has text input, no radio buttons).
+ * @param {HTMLElement} dialog
+ * @returns {boolean}
+ */
+function isTextInputDialog(dialog) {
+  const hasTextInput = dialog?.querySelector('input[type="text"][name="value"]') !== null;
+  const hasRadios = dialog?.querySelector('input[type="radio"][name="selectionId"]') !== null;
+  return hasTextInput && !hasRadios;
 }
 
 Hooks.on("quenchReady", (quench) => {
@@ -115,189 +171,367 @@ Hooks.on("quenchReady", (quench) => {
 
       describe("9.1 NPC Vice Purveyors", function () {
         let actor;
-        let npcActor;
+        let npcActors = [];
+        let originalPopulateFromWorld;
+        let originalPopulateFromCompendia;
 
         beforeEach(async function () {
           this.timeout(10000);
+
+          // Save original settings
+          originalPopulateFromWorld = game.settings.get(TARGET_MODULE_ID, "populateFromWorld");
+          originalPopulateFromCompendia = game.settings.get(TARGET_MODULE_ID, "populateFromCompendia");
+
+          // Enable world objects so test-created NPCs are found
+          await game.settings.set(TARGET_MODULE_ID, "populateFromWorld", true);
+
           const result = await createTestActor({
             name: "NpcIntegration-Test",
             playbookName: "Cutter"
           });
           actor = result.actor;
+          npcActors = [];
         });
 
         afterEach(async function () {
-          this.timeout(5000);
-          await closeAllDialogs();
-          if (npcActor) {
-            await npcActor.delete();
-            npcActor = null;
-          }
-          if (actor) {
-            try {
-              if (actor.sheet) {
-                await actor.sheet.close();
-                await new Promise((resolve) => setTimeout(resolve, 100));
-              }
-            } catch {
-              // Ignore close errors
-            }
-            await actor.delete();
-            actor = null;
-          }
+          this.timeout(8000);
+
+          // Clean up NPCs first (they may have sheets open)
+          await cleanupTestActors(npcActors);
+          npcActors = [];
+
+          // Use unified cleanup helper for main actor and settings
+          await testCleanup({
+            actors: [actor],
+            settings: {
+              moduleId: TARGET_MODULE_ID,
+              values: {
+                populateFromWorld: originalPopulateFromWorld,
+                populateFromCompendia: originalPopulateFromCompendia,
+              },
+            },
+          });
+          actor = null;
         });
 
-        it("9.1.0 vice purveyor section exists on character sheet", async function () {
+        it("9.1.0 vice purveyor smart field exists on character sheet", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
 
-          // Vice purveyor is a smart-field inline in the character info section
-          // Look for the vice-related smart fields or the vice purveyor field specifically
-          const purveyorSection = findVicePurveyorSection(root);
-          const purveyorSelect = findVicePurveyorSelect(root);
-
-          // Also check for vice smart-field (system.vice) which is related
-          const viceField = root.querySelector(
-            "[data-field='system.vice'], .smart-field-label[data-field='system.vice']"
-          );
-
-          assert.ok(
-            purveyorSection || purveyorSelect || viceField,
-            "Vice or purveyor section should exist on character sheet"
-          );
-        });
-
-        it("9.1.1 NPCs with associated_class appear as vice purveyors", async function () {
-          this.timeout(10000);
-
-          // Create an NPC with associated class matching the character's playbook
-          const playbook = actor.items.find((i) => i.type === "class")?.name || "Cutter";
-          npcActor = await createTestNPC({
-            name: "Test Vice Purveyor",
-            associatedClass: playbook,
-          });
-          await new Promise((resolve) => setTimeout(resolve, 200));
-
-          // Re-render the character sheet
-          const sheet = await ensureSheet(actor);
-          await sheet.render(true);
-          await new Promise((resolve) => setTimeout(resolve, 300));
-
-          const root = sheet.element?.[0] || sheet.element;
-
-          // Look for purveyors list or dropdown
-          const purveyorSelect = findVicePurveyorSelect(root);
-          const purveyorItems = findNPCItems(root);
-
-          if (purveyorSelect) {
-            const options = getPurveyorOptions(purveyorSelect);
-            // The NPC should appear in the list (or list should have NPCs)
-            assert.ok(
-              options.length > 0 || true,
-              "Vice purveyor options should be available"
-            );
-          } else if (purveyorItems.length > 0) {
-            assert.ok(
-              purveyorItems.length > 0,
-              "Vice purveyor items should be displayed"
-            );
-          } else {
-            // Vice purveyor integration might work differently
-            assert.ok(
-              true,
-              "Vice purveyor section present (NPCs may be filtered or not configured)"
-            );
-          }
-        });
-
-        it("9.1.2 NPC filtering by playbook works", async function () {
-          this.timeout(15000);
-
-          // Create NPCs with different associated classes
-          const cutterNPC = await createTestNPC({
-            name: "Cutter Purveyor",
-            associatedClass: "Cutter",
-          });
-
-          const lurkerNPC = await createTestNPC({
-            name: "Lurker Purveyor",
-            associatedClass: "Lurk",
-          });
-
-          await new Promise((resolve) => setTimeout(resolve, 200));
-
-          try {
-            // Render sheet for Cutter character
-            const sheet = await ensureSheet(actor);
-            await sheet.render(true);
-            await new Promise((resolve) => setTimeout(resolve, 300));
-
-            const root = sheet.element?.[0] || sheet.element;
-
-            // Get purveyor options
-            const purveyorSelect = findVicePurveyorSelect(root);
-            const purveyorItems = findNPCItems(root);
-
-            if (purveyorSelect) {
-              const options = getPurveyorOptions(purveyorSelect);
-              // Should include Cutter purveyors, may or may not include Lurk
-              // depending on filtering implementation
-              assert.ok(
-                options.length >= 0,
-                "Purveyor options should be filtered appropriately"
-              );
-            } else {
-              // Filtering might not be visible or work differently
-              assert.ok(
-                true,
-                "NPC filtering may be handled differently"
-              );
-            }
-          } finally {
-            await cutterNPC.delete();
-            await lurkerNPC.delete();
-          }
-        });
-
-        it("9.1.2 selecting vice purveyor updates character", async function () {
-          this.timeout(10000);
-
-          const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
-
-          // Enable edit mode if needed
+          // Enable edit mode to see the smart field
           const editToggle = root.querySelector(".toggle-allow-edit");
           if (editToggle && !sheet.allow_edit) {
             editToggle.click();
             await new Promise((resolve) => setTimeout(resolve, 100));
           }
 
-          const purveyorSelect = findVicePurveyorSelect(root);
+          // Look for vice purveyor smart field (in edit mode)
+          const smartField = findVicePurveyorSmartField(root);
+          // Or the read-only display (in locked mode)
+          const readOnlyDisplay = findVicePurveyorDisplay(root);
 
-          if (!purveyorSelect) {
-            // May use different UI for purveyor selection
-            assert.ok(true, "Vice purveyor selection may use different UI");
-            return;
+          assert.ok(
+            smartField || readOnlyDisplay,
+            "Vice purveyor smart field or display should exist on character sheet"
+          );
+
+          if (smartField) {
+            console.log(`[NPC Test] Found vice purveyor smart field: ${smartField.dataset.field}`);
+          }
+        });
+
+        it("9.1.1 NPCs with associated_class='Vice Purveyor' appear in dialog", async function () {
+          this.timeout(15000);
+
+          // Create an NPC with associated_class = "Vice Purveyor" (the filter value used by the smart field)
+          const npc = await createTestNPC({
+            name: "Test Vice Purveyor NPC",
+            associatedClass: "Vice Purveyor",
+          });
+          npcActors.push(npc);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Open character sheet and enable edit mode
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
           }
 
-          const options = purveyorSelect.querySelectorAll("option");
-          if (options.length < 2) {
+          // Find and click the vice purveyor smart field to open dialog
+          const smartField = findVicePurveyorSmartField(root);
+          if (!smartField) {
+            console.log("[NPC Test] Vice purveyor smart field not found");
             this.skip();
             return;
           }
 
-          // Select a different option
-          const newValue = options[1].value;
-          purveyorSelect.value = newValue;
-          purveyorSelect.dispatchEvent(new Event("change", { bubbles: true }));
+          smartField.click();
+          await new Promise((resolve) => setTimeout(resolve, 500));
 
+          // Find the selection dialog
+          const dialog = findSelectionDialog();
+          if (!dialog) {
+            console.log("[NPC Test] Selection dialog did not open");
+            this.skip();
+            return;
+          }
+
+          // Get the choices from the dialog
+          const choices = getDialogChoices(dialog);
+          console.log(`[NPC Test] Found ${choices.length} choices in dialog`);
+
+          // Should have at least one choice (the NPC we created)
+          assert.ok(
+            choices.length > 0,
+            `Vice purveyor dialog should have choices (found: ${choices.length})`
+          );
+
+          // Check if our test NPC is in the choices
+          const choiceTexts = choices.map((c) => c.textContent?.trim() || "");
+          const hasTestNpc = choiceTexts.some((t) => t.includes("Test Vice Purveyor NPC"));
+          console.log(`[NPC Test] Dialog choices: ${choiceTexts.join(", ")}`);
+
+          assert.ok(
+            hasTestNpc,
+            `Dialog should include our test NPC "Test Vice Purveyor NPC" (found: ${choiceTexts.join(", ")})`
+          );
+
+          // Close the dialog without selecting
+          await closeAllDialogs();
+        });
+
+        it("9.1.2 selecting vice purveyor via dialog updates actor flag", async function () {
+          this.timeout(15000);
+
+          // Create an NPC with the correct associated_class
+          const npc = await createTestNPC({
+            name: "Selectable Vice Purveyor",
+            associatedClass: "Vice Purveyor",
+          });
+          npcActors.push(npc);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Open character sheet and enable edit mode
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // CRITICAL: Capture initial value from actor flag
+          const initialPurveyor = actor.getFlag(TARGET_MODULE_ID, "vice_purveyor") || "";
+
+          // Find and click the vice purveyor smart field
+          const smartField = findVicePurveyorSmartField(root);
+          if (!smartField) {
+            console.log("[NPC Test] Vice purveyor smart field not found for selection test");
+            this.skip();
+            return;
+          }
+
+          smartField.click();
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Find the selection dialog
+          const dialog = findSelectionDialog();
+          if (!dialog) {
+            console.log("[NPC Test] Selection dialog did not open for selection test");
+            this.skip();
+            return;
+          }
+
+          // Get choices and select the first one (or the one matching our test NPC)
+          const choices = getDialogChoices(dialog);
+          if (choices.length === 0) {
+            console.log("[NPC Test] No choices in dialog for selection test");
+            await closeAllDialogs();
+            this.skip();
+            return;
+          }
+
+          // Find the radio input and select it
+          const targetChoice = choices.find((c) => c.textContent?.includes("Selectable Vice Purveyor")) || choices[0];
+          const radio = targetChoice.querySelector('input[type="radio"]');
+          if (radio) {
+            radio.checked = true;
+            radio.dispatchEvent(new Event("change", { bubbles: true }));
+          } else {
+            targetChoice.click();
+          }
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Click the OK button
+          const okButton = findDialogOkButton(dialog);
+          if (!okButton) {
+            console.log("[NPC Test] OK button not found in dialog");
+            await closeAllDialogs();
+            this.skip();
+            return;
+          }
+
+          okButton.click();
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // CRITICAL: Verify actor flag was updated
+          const updatedPurveyor = actor.getFlag(TARGET_MODULE_ID, "vice_purveyor");
+
+          assert.ok(
+            updatedPurveyor !== undefined && updatedPurveyor !== null,
+            `Actor flag should be set after selection (got: ${updatedPurveyor})`
+          );
+
+          assert.ok(
+            updatedPurveyor !== initialPurveyor,
+            `Actor flag should change after selection (was "${initialPurveyor}", now "${updatedPurveyor}")`
+          );
+
+          console.log(`[NPC Test] Vice purveyor flag updated: "${initialPurveyor}" → "${updatedPurveyor}"`);
+        });
+
+        it("9.1.3 vice purveyor display shows selected NPC name", async function () {
+          this.timeout(15000);
+
+          // Create an NPC and set it as the vice purveyor
+          const npc = await createTestNPC({
+            name: "Display Test Purveyor",
+            associatedClass: "Vice Purveyor",
+          });
+          npcActors.push(npc);
+
+          // Set the vice purveyor flag directly
+          await actor.setFlag(TARGET_MODULE_ID, "vice_purveyor", npc.name);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Open the sheet
+          const sheet = await ensureSheet(actor);
+          await sheet.render(true);
           await new Promise((resolve) => setTimeout(resolve, 300));
 
-          // Verify the selection was made (or value changed)
+          const root = sheet.element?.[0] || sheet.element;
+
+          // In locked mode, check the display shows the NPC name
+          // In edit mode, the smart field label should show the value
+          const smartField = findVicePurveyorSmartField(root);
+          const display = findVicePurveyorDisplay(root);
+          const targetElement = smartField || display;
+
+          if (!targetElement) {
+            console.log("[NPC Test] No vice purveyor element found for display test");
+            this.skip();
+            return;
+          }
+
+          const displayText = targetElement.textContent?.trim() || targetElement.dataset?.value || "";
+
           assert.ok(
-            purveyorSelect.value !== undefined,
-            "Vice purveyor selection should be possible"
+            displayText.includes("Display Test Purveyor") || displayText === "Display Test Purveyor",
+            `Vice purveyor display should show selected NPC name (got: "${displayText}")`
           );
+
+          console.log(`[NPC Test] Vice purveyor displays: "${displayText}"`);
+        });
+
+        it("9.1.4 no Vice Purveyor NPCs → text input fallback dialog", async function () {
+          this.timeout(15000);
+
+          // Ensure NO NPCs with associated_class="Vice Purveyor" exist
+          // (We don't create any NPCs in this test)
+
+          // Open character sheet and enable edit mode
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // CRITICAL: Capture initial value
+          const initialPurveyor = actor.getFlag(TARGET_MODULE_ID, "vice_purveyor") || "";
+
+          // Find and click the vice purveyor smart field
+          const smartField = findVicePurveyorSmartField(root);
+          if (!smartField) {
+            console.log("[NPC Test] Vice purveyor smart field not found for text input test");
+            this.skip();
+            return;
+          }
+
+          smartField.click();
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Should get a text input dialog, NOT a card selection dialog
+          const textDialog = findTextInputDialog();
+          const cardDialog = findSelectionDialog();
+
+          // If we got a card selection dialog with choices, there are existing Vice Purveyor NPCs
+          if (cardDialog && isCardSelectionDialog(cardDialog)) {
+            const choices = getDialogChoices(cardDialog);
+            if (choices.length > 0) {
+              console.log(`[NPC Test] Found ${choices.length} existing Vice Purveyor NPCs - cannot test text fallback`);
+              await closeAllDialogs();
+              this.skip();
+              return;
+            }
+          }
+
+          // Verify we got a text input dialog
+          const dialog = textDialog || cardDialog;
+          if (!dialog) {
+            console.log("[NPC Test] No dialog opened for text input test");
+            this.skip();
+            return;
+          }
+
+          assert.ok(
+            isTextInputDialog(dialog),
+            "When no Vice Purveyor NPCs exist, should show text input dialog"
+          );
+
+          // Enter a custom value
+          const textInput = dialog.querySelector('input[type="text"][name="value"]');
+          if (!textInput) {
+            console.log("[NPC Test] Text input not found in dialog");
+            await closeAllDialogs();
+            this.skip();
+            return;
+          }
+
+          const customValue = "Custom Vice Purveyor Name";
+          textInput.value = customValue;
+          textInput.dispatchEvent(new Event("input", { bubbles: true }));
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // Click OK/Save button
+          const okButton = findDialogOkButton(dialog);
+          if (!okButton) {
+            console.log("[NPC Test] OK button not found in text input dialog");
+            await closeAllDialogs();
+            this.skip();
+            return;
+          }
+
+          okButton.click();
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // CRITICAL: Verify actor flag was updated with the custom text
+          const updatedPurveyor = actor.getFlag(TARGET_MODULE_ID, "vice_purveyor");
+
+          assert.strictEqual(
+            updatedPurveyor,
+            customValue,
+            `Actor flag should be set to custom text "${customValue}" (got: "${updatedPurveyor}")`
+          );
+
+          console.log(`[NPC Test] Text input fallback: "${initialPurveyor}" → "${updatedPurveyor}"`);
         });
       });
     },

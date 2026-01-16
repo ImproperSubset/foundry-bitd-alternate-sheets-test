@@ -1,6 +1,8 @@
 /**
  * Quench test batch for XP teeth toggle behavior.
  * Tests that clicking lit teeth decrements and clicking unlit teeth sets value.
+ *
+ * Uses parameterized test helpers to reduce code duplication.
  */
 
 import {
@@ -9,9 +11,9 @@ import {
   getAttributeExpMax,
   getTeethState,
   getLitValues,
-  applyToothClick,
   setAttributeExp,
   isTargetModuleActive,
+  runTeethTest,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -93,64 +95,40 @@ Hooks.on("quenchReady", (quench) => {
             assert.deepEqual(lit, [], `${attr} should have no lit teeth at exp=0`);
           });
 
-          it("clicking tooth 1 sets exp to 1", async function () {
-            this.timeout(5000);
-            await setAttributeExp(actor, attr, 0);
-            const result = await applyToothClick({ actor, attribute: attr, value: 1 });
-            assert.equal(
-              String(result.exp),
-              "1",
-              `${attr} exp should be 1 after clicking tooth 1`
-            );
-          });
+          // Parameterized tests for click behavior
+          const clickTestCases = [
+            { name: "clicking tooth 1 sets exp to 1", initial: 0, click: 1, expected: 1, expectedLit: [1] },
+            { name: "clicking tooth 3 sets exp to 3", initial: 1, click: 3, expected: 3, expectedLit: [1, 2, 3] },
+          ];
 
-          it("after clicking tooth 1, only tooth 1 is lit", async function () {
-            this.timeout(5000);
-            await setAttributeExp(actor, attr, 0);
-            const result = await applyToothClick({ actor, attribute: attr, value: 1 });
-            const lit = getLitValues(result.teeth);
-            assert.deepEqual(lit, [1], `${attr} should have only tooth 1 lit`);
-          });
+          for (const tc of clickTestCases) {
+            it(tc.name, async function () {
+              this.timeout(5000);
+              await runTeethTest({
+                actor,
+                attribute: attr,
+                initialValue: tc.initial,
+                clickValue: tc.click,
+                expectedValue: tc.expected,
+                expectedLit: tc.expectedLit,
+                assert,
+              });
+            });
+          }
 
-          it("clicking tooth 3 sets exp to 3", async function () {
-            this.timeout(5000);
-            await setAttributeExp(actor, attr, 1);
-            const result = await applyToothClick({ actor, attribute: attr, value: 3 });
-            assert.equal(
-              String(result.exp),
-              "3",
-              `${attr} exp should be 3 after clicking tooth 3`
-            );
-          });
-
-          it("after clicking tooth 3, teeth 1-3 are lit", async function () {
-            this.timeout(5000);
-            await setAttributeExp(actor, attr, 1);
-            const result = await applyToothClick({ actor, attribute: attr, value: 3 });
-            const lit = getLitValues(result.teeth);
-            assert.deepEqual(lit, [1, 2, 3], `${attr} should have teeth 1-3 lit`);
-          });
-
-          it("clicking max tooth sets exp to max", async function () {
+          it("clicking max tooth sets exp to max and lights all teeth", async function () {
             this.timeout(5000);
             const max = getAttributeExpMax(actor, attr);
-            await setAttributeExp(actor, attr, 0);
-            const result = await applyToothClick({ actor, attribute: attr, value: max });
-            assert.equal(
-              String(result.exp),
-              String(max),
-              `${attr} exp should be ${max} after clicking max tooth`
-            );
-          });
-
-          it("after clicking max tooth, all teeth are lit", async function () {
-            this.timeout(5000);
-            const max = getAttributeExpMax(actor, attr);
-            await setAttributeExp(actor, attr, 0);
-            const result = await applyToothClick({ actor, attribute: attr, value: max });
-            const lit = getLitValues(result.teeth);
-            const expected = Array.from({ length: max }, (_, i) => i + 1);
-            assert.deepEqual(lit, expected, `${attr} should have all ${max} teeth lit`);
+            const expectedLit = Array.from({ length: max }, (_, i) => i + 1);
+            await runTeethTest({
+              actor,
+              attribute: attr,
+              initialValue: 0,
+              clickValue: max,
+              expectedValue: max,
+              expectedLit,
+              assert,
+            });
           });
 
           it("clicking lit tooth 5 at max decrements to 4 (toggle behavior)", async function () {
@@ -160,28 +138,15 @@ Hooks.on("quenchReady", (quench) => {
               this.skip();
               return;
             }
-            // Set to max first
-            await setAttributeExp(actor, attr, max);
-            // Click tooth 5 (which is lit) - should decrement
-            const result = await applyToothClick({ actor, attribute: attr, value: 5 });
-            assert.equal(
-              String(result.exp),
-              "4",
-              `${attr} exp should be 4 after clicking lit tooth 5`
-            );
-          });
-
-          it("after clicking lit tooth 5, teeth 1-4 are lit", async function () {
-            this.timeout(5000);
-            const max = getAttributeExpMax(actor, attr);
-            if (max < 5) {
-              this.skip();
-              return;
-            }
-            await setAttributeExp(actor, attr, max);
-            const result = await applyToothClick({ actor, attribute: attr, value: 5 });
-            const lit = getLitValues(result.teeth);
-            assert.deepEqual(lit, [1, 2, 3, 4], `${attr} should have teeth 1-4 lit after toggle`);
+            await runTeethTest({
+              actor,
+              attribute: attr,
+              initialValue: max,
+              clickValue: 5,
+              expectedValue: 4,
+              expectedLit: [1, 2, 3, 4],
+              assert,
+            });
           });
         });
       }

@@ -67,6 +67,7 @@ export async function waitForActorCondition(
 
 /**
  * Ensure an actor's sheet is rendered and return it.
+ * Waits for the element to be populated after render.
  * @param {Actor} actor - The actor
  * @returns {Promise<ActorSheet>}
  */
@@ -78,8 +79,22 @@ export async function ensureSheet(actor) {
   if (!sheet.rendered) {
     await sheet.render(true);
   }
-  // Allow the DOM to settle
-  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // Wait for the element to be populated (up to 2 seconds)
+  const maxWait = 2000;
+  const interval = 50;
+  let waited = 0;
+  while (waited < maxWait) {
+    const el = sheet.element?.[0] || sheet.element;
+    if (el && typeof el.querySelector === "function") {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+    waited += interval;
+  }
+
+  // Final delay to ensure DOM is fully settled
+  await new Promise((resolve) => setTimeout(resolve, 100));
   return sheet;
 }
 
@@ -433,8 +448,6 @@ export async function setCrewStat(actor, stat, value) {
  */
 export function getCrewTeethState(root, actorId, stat, max) {
   const teeth = [];
-  // wanted uses "wanted-counter" in the ID, others use the stat name directly
-  const idPrefix = stat === "wanted" ? "wanted-counter" : stat;
 
   // Find the checked input to determine current value
   // Radio inputs with same name - the checked one determines current value
@@ -493,4 +506,312 @@ export async function applyCrewToothClick({ actor, stat, value, timeoutMs = 1000
   const teeth = getCrewTeethState(root, actor.id, stat, max);
 
   return { statValue, teeth, updateTimedOut };
+}
+
+// ============================================================================
+// Parameterized Radio Toggle Test Helpers
+// ============================================================================
+
+/**
+ * Run a parameterized teeth/radio toggle test.
+ * Reduces boilerplate for common click-and-verify test patterns.
+ *
+ * @param {object} options - Test configuration
+ * @param {Actor} options.actor - The actor to test
+ * @param {string} options.attribute - Attribute name (insight, prowess, resolve)
+ * @param {number} options.initialValue - Value to set before clicking
+ * @param {number} options.clickValue - Tooth value to click
+ * @param {number} [options.expectedValue] - Expected value after click (asserted if provided)
+ * @param {number[]} [options.expectedLit] - Expected lit teeth array (asserted if provided)
+ * @param {Function} options.assert - Chai assert function from test context
+ * @param {string} [options.message] - Custom assertion message prefix
+ * @returns {Promise<{exp: number, teeth: Array}>}
+ *
+ * @example
+ * // Simple value test
+ * await runTeethTest({
+ *   actor, attribute: "insight", initialValue: 0, clickValue: 1,
+ *   expectedValue: 1, assert
+ * });
+ *
+ * @example
+ * // Value and lit state test
+ * await runTeethTest({
+ *   actor, attribute: "prowess", initialValue: 1, clickValue: 3,
+ *   expectedValue: 3, expectedLit: [1, 2, 3], assert
+ * });
+ */
+export async function runTeethTest({
+  actor,
+  attribute,
+  initialValue,
+  clickValue,
+  expectedValue,
+  expectedLit,
+  assert,
+  message = "",
+}) {
+  await setAttributeExp(actor, attribute, initialValue);
+  const result = await applyToothClick({ actor, attribute, value: clickValue });
+
+  const prefix = message ? `${message}: ` : "";
+
+  if (expectedValue !== undefined) {
+    assert.equal(
+      String(result.exp),
+      String(expectedValue),
+      `${prefix}${attribute} exp should be ${expectedValue} after clicking tooth ${clickValue}`
+    );
+  }
+
+  if (expectedLit !== undefined) {
+    const lit = getLitValues(result.teeth);
+    assert.deepEqual(
+      lit,
+      expectedLit,
+      `${prefix}${attribute} should have teeth ${expectedLit.join(", ")} lit`
+    );
+  }
+
+  return result;
+}
+
+/**
+ * Run a parameterized crew stat teeth test.
+ *
+ * @param {object} options - Test configuration
+ * @param {Actor} options.actor - The crew actor to test
+ * @param {string} options.stat - Stat name (tier, heat, wanted, reputation)
+ * @param {number} options.initialValue - Value to set before clicking
+ * @param {number} options.clickValue - Tooth value to click
+ * @param {number} [options.expectedValue] - Expected value after click
+ * @param {number[]} [options.expectedLit] - Expected lit teeth array
+ * @param {Function} options.assert - Chai assert function
+ * @param {string} [options.message] - Custom assertion message prefix
+ * @returns {Promise<{statValue: number, teeth: Array}>}
+ */
+export async function runCrewTeethTest({
+  actor,
+  stat,
+  initialValue,
+  clickValue,
+  expectedValue,
+  expectedLit,
+  assert,
+  message = "",
+}) {
+  await setCrewStat(actor, stat, initialValue);
+  const result = await applyCrewToothClick({ actor, stat, value: clickValue });
+
+  const prefix = message ? `${message}: ` : "";
+
+  if (expectedValue !== undefined) {
+    assert.equal(
+      Number(result.statValue),
+      expectedValue,
+      `${prefix}${stat} should be ${expectedValue} after clicking tooth ${clickValue}`
+    );
+  }
+
+  if (expectedLit !== undefined) {
+    const lit = getLitValues(result.teeth);
+    assert.deepEqual(
+      lit,
+      expectedLit,
+      `${prefix}${stat} should have teeth ${expectedLit.join(", ")} lit`
+    );
+  }
+
+  return result;
+}
+
+// ============================================================================
+// Test Cleanup Helpers
+// ============================================================================
+
+/**
+ * Clean up a test actor by closing its sheet and deleting it.
+ * Handles V12/V13 differences and ApplicationV2 edge cases.
+ * @param {Actor|null} actor - The actor to clean up (can be null)
+ * @param {object} options - Options
+ * @param {number} options.closeDelay - Delay after closing sheet (default 100)
+ * @returns {Promise<void>}
+ */
+export async function cleanupTestActor(actor, { closeDelay = 100 } = {}) {
+  if (!actor) return;
+
+  // Try to close the sheet (don't rely on rendered flag - V13 can be inconsistent)
+  try {
+    if (actor.sheet) {
+      await actor.sheet.close();
+      await new Promise((resolve) => setTimeout(resolve, closeDelay));
+    }
+  } catch {
+    // Ignore close errors
+  }
+
+  // Force close any Application windows associated with this actor
+  try {
+    const actorId = actor.id;
+    for (const [, app] of Object.entries(ui.windows)) {
+      if (app.actor?.id === actorId || app.document?.id === actorId) {
+        await app.close();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+  } catch {
+    // Ignore window close errors
+  }
+
+  // Delete the actor
+  try {
+    await actor.delete();
+  } catch {
+    // Ignore delete errors
+  }
+}
+
+/**
+ * Clean up multiple test actors.
+ * @param {Array<Actor|null>} actors - Array of actors to clean up
+ * @param {object} options - Options passed to cleanupTestActor
+ * @returns {Promise<void>}
+ */
+export async function cleanupTestActors(actors, options = {}) {
+  for (const actor of actors) {
+    await cleanupTestActor(actor, options);
+  }
+}
+
+/**
+ * Full test cleanup routine for afterEach blocks.
+ * Closes dialogs, cleans up actors, and optionally restores settings.
+ * @param {object} options - Cleanup options
+ * @param {Array<Actor|null>} options.actors - Actors to clean up
+ * @param {object} options.settings - Settings to restore: { moduleId, settings: { key: originalValue } }
+ * @returns {Promise<void>}
+ */
+export async function testCleanup({ actors = [], settings = null } = {}) {
+  // Close all dialogs first - they may be blocking sheet cleanup
+  await closeAllDialogs();
+  await new Promise((resolve) => setTimeout(resolve, 200));
+
+  // Close dialogs again in case new ones appeared during first close
+  await closeAllDialogs();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // Clean up all actors
+  await cleanupTestActors(actors);
+
+  // Final dialog sweep
+  await closeAllDialogs();
+
+  // Restore settings if provided
+  if (settings?.moduleId && settings?.values) {
+    for (const [key, value] of Object.entries(settings.values)) {
+      if (value !== undefined) {
+        try {
+          await game.settings.set(settings.moduleId, key, value);
+        } catch {
+          // Ignore settings errors
+        }
+      }
+    }
+  }
+}
+
+// ============================================================================
+// Clock Test Helpers
+// ============================================================================
+
+/**
+ * Run a parameterized clock click test.
+ *
+ * @param {object} options - Test configuration
+ * @param {Actor} options.actor - The actor to test
+ * @param {number} options.initialValue - Value to set before clicking
+ * @param {number} options.clickSegment - Segment number to click (1-based)
+ * @param {number} options.expectedValue - Expected value after click
+ * @param {Function} options.setValue - Function to set clock value: (actor, value) => Promise
+ * @param {Function} options.getValue - Function to get clock value: (actor) => number
+ * @param {Function} options.clickFn - Function to click segment: (root, segment) => void
+ * @param {Function} options.assert - Chai assert function
+ * @param {string} [options.message] - Custom assertion message
+ * @returns {Promise<number>} - The new value after click
+ */
+export async function runClockClickTest({
+  actor,
+  initialValue,
+  clickSegment,
+  expectedValue,
+  setValue,
+  getValue,
+  clickFn,
+  assert,
+  message = "",
+}) {
+  await setValue(actor, initialValue);
+  const sheet = await ensureSheet(actor);
+  const root = sheet.element?.[0] || sheet.element;
+
+  const updatePromise = waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+  clickFn(root, clickSegment);
+  await updatePromise;
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const newValue = getValue(actor);
+  const prefix = message ? `${message}: ` : "";
+
+  assert.equal(
+    newValue,
+    expectedValue,
+    `${prefix}Clock should be ${expectedValue} after clicking segment ${clickSegment}`
+  );
+
+  return newValue;
+}
+
+/**
+ * Run a parameterized clock right-click (decrement) test.
+ *
+ * @param {object} options - Test configuration
+ * @param {Actor} options.actor - The actor to test
+ * @param {number} options.initialValue - Value to set before right-clicking
+ * @param {number} options.expectedValue - Expected value after right-click
+ * @param {Function} options.setValue - Function to set clock value
+ * @param {Function} options.getValue - Function to get clock value
+ * @param {Function} options.rightClickFn - Function to right-click: (root) => void
+ * @param {Function} options.assert - Chai assert function
+ * @param {string} [options.message] - Custom assertion message
+ * @returns {Promise<number>} - The new value after right-click
+ */
+export async function runClockRightClickTest({
+  actor,
+  initialValue,
+  expectedValue,
+  setValue,
+  getValue,
+  rightClickFn,
+  assert,
+  message = "",
+}) {
+  await setValue(actor, initialValue);
+  const sheet = await ensureSheet(actor);
+  const root = sheet.element?.[0] || sheet.element;
+
+  const updatePromise = waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+  rightClickFn(root);
+  await updatePromise;
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const newValue = getValue(actor);
+  const prefix = message ? `${message}: ` : "";
+
+  assert.equal(
+    newValue,
+    expectedValue,
+    `${prefix}Clock should be ${expectedValue} after right-click (was ${initialValue})`
+  );
+
+  return newValue;
 }

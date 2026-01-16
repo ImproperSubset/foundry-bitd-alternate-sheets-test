@@ -1,18 +1,19 @@
 /**
  * Quench test batch for crew sheet radio toggle behavior.
  * Tests tier, heat, and wanted teeth toggles on crew sheets.
+ *
+ * Uses parameterized test helpers to reduce code duplication.
  */
 
 import {
   createTestCrewActor,
   ensureSheet,
   getCrewStatMax,
-  getCrewStat,
   getCrewTeethState,
   getLitValues,
-  applyCrewToothClick,
   setCrewStat,
   isTargetModuleActive,
+  runCrewTeethTest,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -88,102 +89,42 @@ Hooks.on("quenchReady", (quench) => {
             assert.deepEqual(lit, [], `${stat} should have no lit teeth at value=0`);
           });
 
-          it(`clicking tooth 1 sets ${stat} to 1`, async function () {
-            this.timeout(5000);
-            await setCrewStat(actor, stat, 0);
-            const result = await applyCrewToothClick({ actor, stat, value: 1 });
-            assert.equal(
-              Number(result.statValue),
-              1,
-              `${stat} should be 1 after clicking tooth 1`
-            );
-          });
+          // Parameterized click test cases
+          const clickTestCases = [
+            { name: "clicking tooth 1 sets value to 1", initial: 0, click: 1, expected: 1, expectedLit: [1] },
+            { name: "clicking tooth 3 sets value to 3", initial: 1, click: 3, expected: 3, expectedLit: [1, 2, 3] },
+            { name: "clicking lit tooth 2 at value=3 decrements to 1 (toggle)", initial: 3, click: 2, expected: 1, expectedLit: [1] },
+            { name: "clicking lit tooth 1 at value=1 decrements to 0", initial: 1, click: 1, expected: 0, expectedLit: [] },
+          ];
 
-          it(`after clicking tooth 1, only tooth 1 is lit`, async function () {
-            this.timeout(5000);
-            await setCrewStat(actor, stat, 0);
-            const result = await applyCrewToothClick({ actor, stat, value: 1 });
-            const lit = getLitValues(result.teeth);
-            assert.deepEqual(lit, [1], `${stat} should have only tooth 1 lit`);
-          });
+          for (const tc of clickTestCases) {
+            it(tc.name, async function () {
+              this.timeout(5000);
+              await runCrewTeethTest({
+                actor,
+                stat,
+                initialValue: tc.initial,
+                clickValue: tc.click,
+                expectedValue: tc.expected,
+                expectedLit: tc.expectedLit,
+                assert,
+              });
+            });
+          }
 
-          it(`clicking tooth 3 sets ${stat} to 3`, async function () {
-            this.timeout(5000);
-            await setCrewStat(actor, stat, 1);
-            const result = await applyCrewToothClick({ actor, stat, value: 3 });
-            assert.equal(
-              Number(result.statValue),
-              3,
-              `${stat} should be 3 after clicking tooth 3`
-            );
-          });
-
-          it(`after clicking tooth 3, teeth 1-3 are lit`, async function () {
-            this.timeout(5000);
-            await setCrewStat(actor, stat, 1);
-            const result = await applyCrewToothClick({ actor, stat, value: 3 });
-            const lit = getLitValues(result.teeth);
-            assert.deepEqual(lit, [1, 2, 3], `${stat} should have teeth 1-3 lit`);
-          });
-
-          it(`clicking lit tooth 2 at value=3 decrements to 1 (toggle behavior)`, async function () {
-            this.timeout(5000);
-            await setCrewStat(actor, stat, 3);
-            const result = await applyCrewToothClick({ actor, stat, value: 2 });
-            assert.equal(
-              Number(result.statValue),
-              1,
-              `${stat} should be 1 after clicking lit tooth 2 (decrement to one below clicked)`
-            );
-          });
-
-          it(`after clicking lit tooth 2 from value=3, only tooth 1 is lit`, async function () {
-            this.timeout(5000);
-            await setCrewStat(actor, stat, 3);
-            const result = await applyCrewToothClick({ actor, stat, value: 2 });
-            const lit = getLitValues(result.teeth);
-            assert.deepEqual(lit, [1], `${stat} should have only tooth 1 lit after toggle`);
-          });
-
-          it(`clicking lit tooth 1 at value=1 decrements to 0`, async function () {
-            this.timeout(5000);
-            await setCrewStat(actor, stat, 1);
-            const result = await applyCrewToothClick({ actor, stat, value: 1 });
-            assert.equal(
-              Number(result.statValue),
-              0,
-              `${stat} should be 0 after clicking lit tooth 1`
-            );
-          });
-
-          it(`after clicking lit tooth 1, no teeth are lit`, async function () {
-            this.timeout(5000);
-            await setCrewStat(actor, stat, 1);
-            const result = await applyCrewToothClick({ actor, stat, value: 1 });
-            const lit = getLitValues(result.teeth);
-            assert.deepEqual(lit, [], `${stat} should have no teeth lit after decrement to 0`);
-          });
-
-          it(`clicking max tooth sets ${stat} to max`, async function () {
+          it(`clicking max tooth sets ${stat} to max and lights all teeth`, async function () {
             this.timeout(5000);
             const max = getCrewStatMax(actor, stat);
-            await setCrewStat(actor, stat, 0);
-            const result = await applyCrewToothClick({ actor, stat, value: max });
-            assert.equal(
-              Number(result.statValue),
-              max,
-              `${stat} should be ${max} after clicking max tooth`
-            );
-          });
-
-          it(`after clicking max tooth, all teeth are lit`, async function () {
-            this.timeout(5000);
-            const max = getCrewStatMax(actor, stat);
-            await setCrewStat(actor, stat, 0);
-            const result = await applyCrewToothClick({ actor, stat, value: max });
-            const lit = getLitValues(result.teeth);
-            const expected = Array.from({ length: max }, (_, i) => i + 1);
-            assert.deepEqual(lit, expected, `${stat} should have all ${max} teeth lit`);
+            const expectedLit = Array.from({ length: max }, (_, i) => i + 1);
+            await runCrewTeethTest({
+              actor,
+              stat,
+              initialValue: 0,
+              clickValue: max,
+              expectedValue: max,
+              expectedLit,
+              assert,
+            });
           });
         });
       }

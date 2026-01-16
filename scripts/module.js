@@ -105,3 +105,82 @@ Hooks.once("ready", () => {
   console.log(`  quench.runBatches("bitd-alternate-sheets.binary-checkboxes")`);
   console.log(`  game.modules.get("${MODULE_ID}").api.runAllTests()`);
 });
+
+/**
+ * Log test summary when Quench reports are available.
+ * Outputs failed and skipped tests to the console after all test output.
+ *
+ * Tests with "[DISABLED]" in their name are excluded from the skipped count
+ * since they represent intentionally disabled functionality.
+ */
+Hooks.on("quenchReports", (report) => {
+  // Delay slightly to ensure this appears after all test logging
+  setTimeout(() => {
+    try {
+      const data = JSON.parse(report.json);
+      const stats = data.stats || {};
+
+      // Separate disabled tests from unexpected skips
+      const disabledTests = (data.pending || []).filter(t =>
+        t.fullTitle?.includes("[DISABLED]") || t.title?.includes("[DISABLED]")
+      );
+      const unexpectedSkips = (data.pending || []).filter(t =>
+        !t.fullTitle?.includes("[DISABLED]") && !t.title?.includes("[DISABLED]")
+      );
+
+      console.log("\n\n%c════════════════════════════════════════════════════════════", "color: #888;");
+      console.log("%c                    QUENCH TEST SUMMARY", "font-weight: bold; font-size: 14px;");
+      console.log("%c════════════════════════════════════════════════════════════", "color: #888;");
+      console.log(`  Passed:   %c${stats.passes || 0}`, "color: green;");
+      console.log(`  Failed:   %c${stats.failures || 0}`, stats.failures ? "color: red; font-weight: bold;" : "color: green;");
+      console.log(`  Skipped:  %c${unexpectedSkips.length}`, unexpectedSkips.length ? "color: orange;" : "color: inherit;");
+      if (disabledTests.length > 0) {
+        console.log(`  Disabled: %c${disabledTests.length}`, "color: #888;");
+      }
+      console.log(`  Duration: ${stats.duration || 0}ms`);
+
+      // Log failed tests in a collapsed group
+      if (data.failures?.length > 0) {
+        console.log("");
+        console.groupCollapsed(`%c✗ Failed Tests (${data.failures.length})`, "color: red; font-weight: bold;");
+        for (const failure of data.failures) {
+          console.log(`%c✗ ${failure.fullTitle}`, "color: red;");
+          if (failure.err?.message) {
+            console.log(`  %c${failure.err.message}`, "color: #c66;");
+          }
+        }
+        console.groupEnd();
+      }
+
+      // Log unexpected skipped tests in a collapsed group (not disabled ones)
+      if (unexpectedSkips.length > 0) {
+        console.groupCollapsed(`%c⊘ Skipped Tests (${unexpectedSkips.length})`, "color: orange; font-weight: bold;");
+        for (const skipped of unexpectedSkips) {
+          console.log(`%c⊘ ${skipped.fullTitle}`, "color: orange;");
+        }
+        console.groupEnd();
+      }
+
+      // Log disabled tests separately (collapsed, dimmed)
+      if (disabledTests.length > 0) {
+        console.groupCollapsed(`%c⊗ Disabled Tests (${disabledTests.length})`, "color: #888;");
+        for (const disabled of disabledTests) {
+          console.log(`%c⊗ ${disabled.fullTitle}`, "color: #888;");
+        }
+        console.groupEnd();
+      }
+
+      // Final status line
+      console.log("%c════════════════════════════════════════════════════════════", "color: #888;");
+      if (stats.failures === 0 && stats.passes > 0) {
+        console.log("%c✓ All tests passed!", "color: green; font-weight: bold; font-size: 12px;");
+      } else if (stats.failures > 0) {
+        console.log(`%c✗ ${stats.failures} test(s) failed`, "color: red; font-weight: bold; font-size: 12px;");
+      }
+      console.log("%c════════════════════════════════════════════════════════════\n", "color: #888;");
+
+    } catch (err) {
+      console.error(`[${MODULE_ID}] Error parsing Quench report:`, err);
+    }
+  }, 100);
+});

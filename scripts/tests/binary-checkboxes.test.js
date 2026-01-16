@@ -181,9 +181,14 @@ Hooks.on("quenchReady", (quench) => {
           if (loadPills.length === 0) {
             // Check for load value display instead
             const loadValue = getLoadValue(root);
+            if (loadValue === null) {
+              console.log("[BinaryCheckboxes Test] No load display found");
+              this.skip();
+              return;
+            }
             assert.ok(
-              loadValue !== null || true,
-              "Load value should be displayed (or load UI may differ)"
+              loadValue !== null,
+              "Load value should be displayed"
             );
             return;
           }
@@ -199,8 +204,8 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           assert.ok(
-            validPills > 0 || loadPills.length > 0,
-            "Load pills should display load amounts"
+            validPills > 0,
+            `Load pills should display load amounts (found ${validPills} valid pills)`
           );
         });
 
@@ -225,15 +230,23 @@ Hooks.on("quenchReady", (quench) => {
             return;
           }
 
-          // Get initial load
+          // Get initial load from DOM
           const initialLoad = getLoadValue(root) || 0;
+
+          // CRITICAL: Get initial equipped items from actor flags (not actor.items)
+          const initialEquipped = actor.getFlag(TARGET_MODULE_ID, "equipped-items") || {};
+          const initialEquippedCount = Object.keys(initialEquipped).length;
 
           // Find an unselected item to toggle
           let toggled = false;
+          let toggledItemId = null;
+          let toggledItemName = null;
           for (const item of gearItems) {
             if (!isItemSelected(item)) {
               const checkbox = item.querySelector("input[type='checkbox']");
               if (checkbox) {
+                toggledItemId = item.dataset?.itemId;
+                toggledItemName = item.dataset?.itemName || "unknown";
                 checkbox.click();
                 toggled = true;
                 break;
@@ -245,6 +258,9 @@ Hooks.on("quenchReady", (quench) => {
             // Try binary checkboxes directly
             for (const checkbox of binaryCheckboxes) {
               if (!checkbox.checked) {
+                const itemBlock = checkbox.closest(".item-block");
+                toggledItemId = itemBlock?.dataset?.itemId;
+                toggledItemName = itemBlock?.dataset?.itemName || "unknown";
                 checkbox.click();
                 toggled = true;
                 break;
@@ -260,6 +276,23 @@ Hooks.on("quenchReady", (quench) => {
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
+          // CRITICAL: Verify actor flags were updated (equipped-items flag)
+          const newEquipped = actor.getFlag(TARGET_MODULE_ID, "equipped-items") || {};
+          const newEquippedCount = Object.keys(newEquipped).length;
+
+          assert.ok(
+            newEquippedCount > initialEquippedCount,
+            `Equipped items count should increase after selecting item (was ${initialEquippedCount}, now ${newEquippedCount})`
+          );
+
+          // Verify the specific item was equipped if we know its ID
+          if (toggledItemId) {
+            assert.ok(
+              newEquipped[toggledItemId] !== undefined,
+              `Item "${toggledItemId}" should be in equipped-items flag after selection`
+            );
+          }
+
           // Re-render and check load
           await actor.sheet.render(false);
           await new Promise((resolve) => setTimeout(resolve, 100));
@@ -267,11 +300,20 @@ Hooks.on("quenchReady", (quench) => {
           const newRoot = actor.sheet.element?.[0] || actor.sheet.element;
           const newLoad = getLoadValue(newRoot);
 
-          // Load should have changed (or be trackable)
-          assert.ok(
-            newLoad !== null || true,
-            "Load value should update when items are selected"
-          );
+          // Load should have changed in DOM
+          if (newLoad === null) {
+            console.log("[BinaryCheckboxes Test] Cannot read load value after item selection");
+            // Still pass - we verified the flag change above
+          } else {
+            assert.notEqual(
+              newLoad,
+              initialLoad,
+              `Load value should update when items are selected (was ${initialLoad}, now ${newLoad})`
+            );
+          }
+
+          // Log for debugging
+          console.log(`[BinaryCheckboxes Test] Selected item "${toggledItemName}" (${toggledItemId}): equipped ${initialEquippedCount} → ${newEquippedCount}, load ${initialLoad} → ${newLoad}`);
         });
       });
 
@@ -318,7 +360,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("11.2.1 toggle checkbox creates owned item", async function () {
+        it("11.2.1 toggle checkbox equips item via flag", async function () {
           this.timeout(10000);
 
           const sheet = await ensureSheet(actor);
@@ -340,9 +382,16 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find an unchecked checkbox
           let targetCheckbox = null;
+          let expectedItemId = null;
+          let expectedItemName = null;
           for (const checkbox of binaryCheckboxes) {
             if (!checkbox.checked) {
               targetCheckbox = checkbox;
+              const itemBlock = checkbox.closest(".item-block");
+              // Get item ID and name from data attributes
+              expectedItemId = itemBlock?.dataset?.itemId;
+              expectedItemName = itemBlock?.dataset?.itemName ||
+                checkbox.closest("[data-item-name]")?.dataset?.itemName;
               break;
             }
           }
@@ -352,22 +401,54 @@ Hooks.on("quenchReady", (quench) => {
             return;
           }
 
-          const itemCountBefore = actor.items.size;
+          // CRITICAL: Get initial equipped items from actor flags
+          const equippedBefore = actor.getFlag(TARGET_MODULE_ID, "equipped-items") || {};
+          const equippedCountBefore = Object.keys(equippedBefore).length;
 
           targetCheckbox.click();
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
-          const itemCountAfter = actor.items.size;
+          // CRITICAL: Verify actor flag was updated (equipped-items)
+          const equippedAfter = actor.getFlag(TARGET_MODULE_ID, "equipped-items") || {};
+          const equippedCountAfter = Object.keys(equippedAfter).length;
 
-          // Item count should increase (owned item created)
           assert.ok(
-            itemCountAfter >= itemCountBefore,
-            "Toggling checkbox should create owned item (or update ownership)"
+            equippedCountAfter > equippedCountBefore,
+            `Equipped items count should increase after checking item (was ${equippedCountBefore}, now ${equippedCountAfter})`
           );
+
+          // Verify the specific item was equipped if we know its ID
+          if (expectedItemId) {
+            assert.ok(
+              equippedAfter[expectedItemId] !== undefined,
+              `Item "${expectedItemId}" should be in equipped-items flag`
+            );
+            // Verify the equipped item has expected structure
+            const equippedItem = equippedAfter[expectedItemId];
+            assert.ok(
+              equippedItem.progress > 0,
+              `Equipped item should have progress > 0 (got: ${equippedItem?.progress})`
+            );
+          }
+
+          // Also verify DOM reflects the change
+          await actor.sheet.render(false);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          const newRoot = actor.sheet.element?.[0] || actor.sheet.element;
+          const checkboxesAfter = findBinaryItemCheckboxes(newRoot);
+          const checkedCount = Array.from(checkboxesAfter).filter(cb => cb.checked).length;
+
+          assert.ok(
+            checkedCount > 0,
+            `DOM should show at least one checked item after toggle (checked: ${checkedCount})`
+          );
+
+          console.log(`[BinaryCheckboxes Test] Equipped item "${expectedItemName || expectedItemId || 'unknown'}": equipped ${equippedCountBefore} → ${equippedCountAfter}`);
         });
 
-        it("11.2.1 untoggle checkbox removes owned item", async function () {
+        it("11.2.1 untoggle checkbox unequips item via flag", async function () {
           this.timeout(10000);
 
           const sheet = await ensureSheet(actor);
@@ -387,11 +468,16 @@ Hooks.on("quenchReady", (quench) => {
             return;
           }
 
-          // Find a checked checkbox
+          // Find a checked checkbox, or check one first then uncheck
           let targetCheckbox = null;
+          let itemId = null;
+          let itemName = null;
           for (const checkbox of binaryCheckboxes) {
             if (checkbox.checked) {
               targetCheckbox = checkbox;
+              const itemBlock = checkbox.closest(".item-block");
+              itemId = itemBlock?.dataset?.itemId;
+              itemName = itemBlock?.dataset?.itemName;
               break;
             }
           }
@@ -400,11 +486,36 @@ Hooks.on("quenchReady", (quench) => {
             // First check one, then uncheck
             for (const checkbox of binaryCheckboxes) {
               if (!checkbox.checked) {
+                const itemBlock = checkbox.closest(".item-block");
+                itemId = itemBlock?.dataset?.itemId;
+                itemName = itemBlock?.dataset?.itemName;
                 checkbox.click();
                 await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
                 await new Promise((resolve) => setTimeout(resolve, 200));
-                targetCheckbox = checkbox;
+                // DOM may have re-rendered - re-query the checkbox
+                await actor.sheet.render(false);
+                await new Promise((resolve) => setTimeout(resolve, 100));
                 break;
+              }
+            }
+          }
+
+          // Re-query DOM after potential re-render to get fresh checkbox reference
+          const freshRoot = actor.sheet.element?.[0] || actor.sheet.element;
+          const freshCheckboxes = findBinaryItemCheckboxes(freshRoot);
+
+          // Find the now-checked checkbox (either the one we just checked, or original checked one)
+          targetCheckbox = null;
+          for (const checkbox of freshCheckboxes) {
+            if (checkbox.checked) {
+              const itemBlock = checkbox.closest(".item-block");
+              const thisItemId = itemBlock?.dataset?.itemId;
+              // Prefer the specific item we checked, but take any checked item
+              if (thisItemId === itemId || !targetCheckbox) {
+                targetCheckbox = checkbox;
+                itemId = thisItemId;
+                itemName = itemBlock?.dataset?.itemName;
+                if (thisItemId === itemId) break; // Found exact match
               }
             }
           }
@@ -414,19 +525,40 @@ Hooks.on("quenchReady", (quench) => {
             return;
           }
 
-          const itemCountBefore = actor.items.size;
+          // CRITICAL: Get equipped items from actor flags before untoggle
+          const equippedBefore = actor.getFlag(TARGET_MODULE_ID, "equipped-items") || {};
+          const equippedCountBefore = Object.keys(equippedBefore).length;
+
+          // Verify item is equipped before removal (if we know its ID)
+          if (itemId) {
+            assert.ok(
+              equippedBefore[itemId] !== undefined,
+              `Item "${itemId}" should be in equipped-items flag before untoggle`
+            );
+          }
 
           targetCheckbox.click();
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
-          const itemCountAfter = actor.items.size;
+          // CRITICAL: Verify actor flag was updated (item removed from equipped-items)
+          const equippedAfter = actor.getFlag(TARGET_MODULE_ID, "equipped-items") || {};
+          const equippedCountAfter = Object.keys(equippedAfter).length;
 
-          // Item count should decrease or stay same (owned item removed)
           assert.ok(
-            itemCountAfter <= itemCountBefore,
-            "Untoggling checkbox should remove owned item (or update ownership)"
+            equippedCountAfter < equippedCountBefore,
+            `Equipped items count should decrease after unchecking item (was ${equippedCountBefore}, now ${equippedCountAfter})`
           );
+
+          // Verify the specific item was unequipped if we know its ID
+          if (itemId) {
+            assert.ok(
+              equippedAfter[itemId] === undefined,
+              `Item "${itemId}" should no longer be in equipped-items flag after untoggle`
+            );
+          }
+
+          console.log(`[BinaryCheckboxes Test] Unequipped item "${itemName || itemId || 'unknown'}": equipped ${equippedCountBefore} → ${equippedCountAfter}`);
         });
 
         it("11.2.1 checkbox state reflects item ownership", async function () {

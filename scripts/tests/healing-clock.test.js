@@ -1,6 +1,8 @@
 /**
  * Quench test batch for healing clock behavior.
  * Tests the 4-segment healing clock on character sheets.
+ *
+ * Uses parameterized test helpers to reduce code duplication.
  */
 
 import {
@@ -9,6 +11,8 @@ import {
   waitForActorUpdate,
   isTargetModuleActive,
   closeAllDialogs,
+  runClockClickTest,
+  runClockRightClickTest,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -65,7 +69,6 @@ function clickClockSegment(root, segment) {
   const clockEl = findHealingClockElement(root);
   if (!clockEl) throw new Error("Healing clock element not found");
 
-  // Find the label for the segment
   const labels = clockEl.querySelectorAll("label.radio-toggle");
   if (segment < 1 || segment > labels.length) {
     throw new Error(`Invalid segment ${segment}, clock has ${labels.length} segments`);
@@ -165,118 +168,59 @@ Hooks.on("quenchReady", (quench) => {
       });
 
       describe("Healing Clock Click Interaction", function () {
-        it("clicking segment 1 when clock is empty sets value to 1", async function () {
-          this.timeout(5000);
-          await setHealingClockValue(actor, 0);
-          const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
+        // Parameterized click test cases
+        const clickTestCases = [
+          { name: "clicking segment 1 when clock is empty sets value to 1", initial: 0, click: 1, expected: 1 },
+          { name: "clicking segment 3 when clock is at 1 sets value to 3", initial: 1, click: 3, expected: 3 },
+          { name: "clicking segment 4 fills the clock completely", initial: 2, click: 4, expected: 4 },
+          { name: "clicking filled segment 2 decrements to 1 (toggle)", initial: 3, click: 2, expected: 1 },
+          { name: "clicking segment 1 when at 1 decrements to 0", initial: 1, click: 1, expected: 0 },
+        ];
 
-          const updatePromise = waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
-          clickClockSegment(root, 1);
-          await updatePromise;
-          await new Promise((resolve) => setTimeout(resolve, 100));
-
-          const newValue = getHealingClockValue(actor);
-          assert.equal(newValue, 1, "Clicking segment 1 should set value to 1");
-        });
-
-        it("clicking segment 3 when clock is at 1 sets value to 3", async function () {
-          this.timeout(5000);
-          await setHealingClockValue(actor, 1);
-          const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
-
-          const updatePromise = waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
-          clickClockSegment(root, 3);
-          await updatePromise;
-          await new Promise((resolve) => setTimeout(resolve, 100));
-
-          const newValue = getHealingClockValue(actor);
-          assert.equal(newValue, 3, "Clicking segment 3 should set value to 3");
-        });
-
-        it("clicking segment 4 fills the clock completely", async function () {
-          this.timeout(5000);
-          await setHealingClockValue(actor, 2);
-          const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
-
-          const updatePromise = waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
-          clickClockSegment(root, 4);
-          await updatePromise;
-          await new Promise((resolve) => setTimeout(resolve, 100));
-
-          const newValue = getHealingClockValue(actor);
-          assert.equal(newValue, 4, "Clicking segment 4 should fill clock to 4");
-        });
-
-        it("clicking filled segment decrements clock (toggle behavior)", async function () {
-          this.timeout(5000);
-          await setHealingClockValue(actor, 3);
-          const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
-
-          const updatePromise = waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
-          // Click segment 2 which is currently filled - should decrement to 1
-          clickClockSegment(root, 2);
-          await updatePromise;
-          await new Promise((resolve) => setTimeout(resolve, 100));
-
-          const newValue = getHealingClockValue(actor);
-          assert.equal(newValue, 1, "Clicking filled segment 2 should decrement to 1");
-        });
-
-        it("clicking segment 1 when clock is at 1 decrements to 0", async function () {
-          this.timeout(5000);
-          await setHealingClockValue(actor, 1);
-          const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
-
-          const updatePromise = waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
-          clickClockSegment(root, 1);
-          await updatePromise;
-          await new Promise((resolve) => setTimeout(resolve, 100));
-
-          const newValue = getHealingClockValue(actor);
-          assert.equal(newValue, 0, "Clicking segment 1 when at 1 should decrement to 0");
-        });
+        for (const tc of clickTestCases) {
+          it(tc.name, async function () {
+            this.timeout(5000);
+            await runClockClickTest({
+              actor,
+              initialValue: tc.initial,
+              clickSegment: tc.click,
+              expectedValue: tc.expected,
+              setValue: setHealingClockValue,
+              getValue: getHealingClockValue,
+              clickFn: clickClockSegment,
+              assert,
+            });
+          });
+        }
       });
 
       describe("Healing Clock Right-Click", function () {
-        it("right-click on clock decrements value by 1", async function () {
-          this.timeout(5000);
-          await setHealingClockValue(actor, 3);
-          const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
+        // Parameterized right-click test cases
+        const rightClickTestCases = [
+          { name: "right-click on clock decrements value by 1", initial: 3, expected: 2 },
+          { name: "right-click on clock at 0 stays at 0", initial: 0, expected: 0 },
+        ];
 
-          const updatePromise = waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
-          rightClickClock(root);
-          await updatePromise;
-          await new Promise((resolve) => setTimeout(resolve, 100));
-
-          const newValue = getHealingClockValue(actor);
-          assert.equal(newValue, 2, "Right-click should decrement from 3 to 2");
-        });
-
-        it("right-click on clock at 0 stays at 0", async function () {
-          this.timeout(5000);
-          await setHealingClockValue(actor, 0);
-          const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
-
-          // No update expected since we're already at 0
-          rightClickClock(root);
-          await new Promise((resolve) => setTimeout(resolve, 200));
-
-          const newValue = getHealingClockValue(actor);
-          assert.equal(newValue, 0, "Right-click at 0 should stay at 0");
-        });
+        for (const tc of rightClickTestCases) {
+          it(tc.name, async function () {
+            this.timeout(5000);
+            await runClockRightClickTest({
+              actor,
+              initialValue: tc.initial,
+              expectedValue: tc.expected,
+              setValue: setHealingClockValue,
+              getValue: getHealingClockValue,
+              rightClickFn: rightClickClock,
+              assert,
+            });
+          });
+        }
 
         it("multiple right-clicks decrement correctly", async function () {
           this.timeout(5000);
           await setHealingClockValue(actor, 4);
           const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
+          let root = sheet.element?.[0] || sheet.element;
 
           // First right-click
           let updatePromise = waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});

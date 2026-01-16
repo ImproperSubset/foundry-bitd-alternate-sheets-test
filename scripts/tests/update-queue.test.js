@@ -9,6 +9,8 @@ import {
   ensureSheet,
   waitForActorUpdate,
   isTargetModuleActive,
+  cleanupTestActor,
+  testCleanup,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -79,18 +81,8 @@ Hooks.on("quenchReady", (quench) => {
 
         afterEach(async function () {
           this.timeout(5000);
-          if (actor) {
-            try {
-              if (actor.sheet) {
-                await actor.sheet.close();
-                await new Promise((resolve) => setTimeout(resolve, 100));
-              }
-            } catch {
-              // Ignore close errors
-            }
-            await actor.delete();
-            actor = null;
-          }
+          await cleanupTestActor(actor);
+          actor = null;
         });
 
         it("5.1.1 rapid updates process sequentially", async function () {
@@ -113,10 +105,10 @@ Hooks.on("quenchReady", (quench) => {
             return;
           }
 
-          // Get initial value
+          // CRITICAL: Capture initial value before any updates
           const initialExp = actor.system?.attributes?.insight?.exp ?? 0;
 
-          // Simulate rapid clicks on teeth (5 quick clicks)
+          // Simulate rapid clicks on teeth (3 quick clicks)
           const clicks = [];
           for (let i = 1; i <= 3; i++) {
             const label = root.querySelector(`label[for*="insight-${i}"]`);
@@ -138,19 +130,21 @@ Hooks.on("quenchReady", (quench) => {
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 500));
 
-          // The final value should be consistent (no race conditions)
+          // CRITICAL: Verify actor.system was actually updated
           const finalExp = actor.system?.attributes?.insight?.exp;
           assert.ok(
             finalExp !== undefined,
             "Final exp value should be defined after rapid updates"
           );
 
-          // Value should have changed from initial (proving updates processed)
-          // Due to toggle behavior, the exact value depends on number of clicks
-          assert.ok(
-            typeof finalExp === "number" || typeof finalExp === "string",
-            "Exp value should be numeric after updates"
+          // CRITICAL: Value should have changed from initial (proving updates processed)
+          assert.notStrictEqual(
+            finalExp,
+            initialExp,
+            `Exp value should change after rapid clicks (was ${initialExp}, now ${finalExp})`
           );
+
+          console.log(`[UpdateQueue Test] Rapid updates: exp ${initialExp} → ${finalExp}`);
         });
 
         it("5.1.1 multiple checkboxes don't cause race conditions", async function () {
@@ -180,9 +174,19 @@ Hooks.on("quenchReady", (quench) => {
               return;
             }
 
+            // CRITICAL: Capture initial state before rapid toggles
+            const initialAbilityCount = crewActor.items.filter((i) => i.type === "crew_ability").length;
+            const toggleCount = Math.min(3, checkboxes.length);
+
+            // Capture ability names we're toggling
+            const abilityNames = [];
+            for (let i = 0; i < toggleCount; i++) {
+              abilityNames.push(checkboxes[i].dataset?.itemName);
+            }
+
             // Toggle multiple checkboxes rapidly
             const togglePromises = [];
-            for (let i = 0; i < Math.min(3, checkboxes.length); i++) {
+            for (let i = 0; i < toggleCount; i++) {
               togglePromises.push(
                 new Promise((resolve) => {
                   checkboxes[i].checked = true;
@@ -195,17 +199,27 @@ Hooks.on("quenchReady", (quench) => {
             await Promise.all(togglePromises);
             await new Promise((resolve) => setTimeout(resolve, 1000));
 
-            // Verify no errors occurred (actor state should be consistent)
-            const ownedAbilities = crewActor.items.filter((i) => i.type === "crew_ability");
+            // CRITICAL: Verify actor.items was updated with correct count
+            const finalAbilityCount = crewActor.items.filter((i) => i.type === "crew_ability").length;
+
+            // Should have more abilities than before
             assert.ok(
-              ownedAbilities.length >= 0,
-              "Crew should have a consistent number of abilities after rapid toggles"
+              finalAbilityCount > initialAbilityCount,
+              `Crew should have more abilities after toggles (was ${initialAbilityCount}, now ${finalAbilityCount})`
             );
+
+            // Verify at least some of the toggled abilities exist
+            const createdAbilities = abilityNames.filter(name =>
+              crewActor.items.some(i => i.type === "crew_ability" && i.name === name)
+            );
+            assert.ok(
+              createdAbilities.length > 0,
+              `At least one toggled ability should be created (found ${createdAbilities.length} of ${toggleCount})`
+            );
+
+            console.log(`[UpdateQueue Test] Race condition test: abilities ${initialAbilityCount} → ${finalAbilityCount} (toggled ${toggleCount})`);
           } finally {
-            if (crewActor?.sheet?.rendered) {
-              await crewActor.sheet.close();
-            }
-            await crewActor?.delete();
+            await cleanupTestActor(crewActor);
           }
         });
       });
@@ -231,18 +245,8 @@ Hooks.on("quenchReady", (quench) => {
           if (errorTracker) errorTracker.cleanup();
           if (notificationTracker) notificationTracker.restore();
 
-          if (actor) {
-            try {
-              if (actor.sheet) {
-                await actor.sheet.close();
-                await new Promise((resolve) => setTimeout(resolve, 100));
-              }
-            } catch {
-              // Ignore close errors
-            }
-            await actor.delete();
-            actor = null;
-          }
+          await cleanupTestActor(actor);
+          actor = null;
         });
 
         it("5.2.0 queueUpdate function is available", async function () {
@@ -279,6 +283,9 @@ Hooks.on("quenchReady", (quench) => {
             return;
           }
 
+          // CRITICAL: Capture initial value before update
+          const initialExp = actor.system?.attributes?.insight?.exp ?? 0;
+
           const input = document.getElementById(label.getAttribute("for"));
           if (input) {
             input.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -298,6 +305,16 @@ Hooks.on("quenchReady", (quench) => {
             0,
             "Successful updates should not trigger error hooks"
           );
+
+          // CRITICAL: Verify actor.system was actually updated
+          const finalExp = actor.system?.attributes?.insight?.exp;
+          assert.notStrictEqual(
+            finalExp,
+            initialExp,
+            `Actor data should change after successful update (was ${initialExp}, now ${finalExp})`
+          );
+
+          console.log(`[UpdateQueue Test] Successful update: exp ${initialExp} → ${finalExp}`);
         });
 
         it("5.2.2 queueUpdate returns promise that resolves", async function () {

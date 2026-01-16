@@ -126,6 +126,17 @@ Hooks.on("quenchReady", (quench) => {
           await clickEditToggle(sheet); // Unlock
           assert.ok(isSheetUnlocked(sheet), "Sheet should be unlocked");
 
+          // CRITICAL: Verify user flag was actually stored
+          const userFlags = game.user?.getFlag(TARGET_MODULE_ID, "allowEditStates");
+          assert.ok(
+            userFlags !== undefined,
+            "User should have allowEditStates flag after toggling edit mode"
+          );
+          assert.ok(
+            userFlags?.[actor.id] === true,
+            `User flag should store actor ${actor.id} as unlocked (flag value: ${JSON.stringify(userFlags)})`
+          );
+
           // Close and reopen sheet
           await sheet.close();
           await new Promise((resolve) => setTimeout(resolve, 100));
@@ -136,6 +147,15 @@ Hooks.on("quenchReady", (quench) => {
 
           assert.equal(sheet.allow_edit, true, "Sheet should remember unlocked state");
           assert.ok(isSheetUnlocked(sheet), "Sheet DOM should still have allow-edit class");
+
+          // CRITICAL: Verify flag is still present after reopen
+          const userFlagsAfter = game.user?.getFlag(TARGET_MODULE_ID, "allowEditStates");
+          assert.ok(
+            userFlagsAfter?.[actor.id] === true,
+            `User flag should still store actor ${actor.id} as unlocked after reopen`
+          );
+
+          console.log(`[EditMode Test] Edit state persisted via user flag for actor ${actor.id}`);
         });
 
         it("locked sheet hides delete buttons", async function () {
@@ -218,6 +238,17 @@ Hooks.on("quenchReady", (quench) => {
           await clickEditToggle(sheet); // Unlock
           assert.ok(isSheetUnlocked(sheet), "Crew sheet should be unlocked");
 
+          // CRITICAL: Verify user flag was actually stored
+          const userFlags = game.user?.getFlag(TARGET_MODULE_ID, "allowEditStates");
+          assert.ok(
+            userFlags !== undefined,
+            "User should have allowEditStates flag after toggling crew edit mode"
+          );
+          assert.ok(
+            userFlags?.[actor.id] === true,
+            `User flag should store crew actor ${actor.id} as unlocked (flag value: ${JSON.stringify(userFlags)})`
+          );
+
           // Close and reopen sheet
           await sheet.close();
           await new Promise((resolve) => setTimeout(resolve, 100));
@@ -228,6 +259,15 @@ Hooks.on("quenchReady", (quench) => {
 
           assert.equal(sheet.allow_edit, true, "Crew sheet should remember unlocked state");
           assert.ok(isSheetUnlocked(sheet), "Crew sheet DOM should still have allow-edit class");
+
+          // CRITICAL: Verify flag is still present after reopen
+          const userFlagsAfter = game.user?.getFlag(TARGET_MODULE_ID, "allowEditStates");
+          assert.ok(
+            userFlagsAfter?.[actor.id] === true,
+            `User flag should still store crew actor ${actor.id} as unlocked after reopen`
+          );
+
+          console.log(`[EditMode Test] Crew edit state persisted via user flag for actor ${actor.id}`);
         });
       });
     },

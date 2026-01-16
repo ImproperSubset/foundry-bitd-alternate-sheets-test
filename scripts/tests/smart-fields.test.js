@@ -295,7 +295,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(newRep, "crew_reputation item should be created after selection");
         });
 
-        it("2.1.3 hunting_grounds selector works", async function () {
+        it("2.1.3 hunting_grounds selector opens dialog", async function () {
           this.timeout(8000);
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
@@ -323,6 +323,80 @@ Hooks.on("quenchReady", (quench) => {
 
           // Clean up by clicking cancel
           await dialog.close();
+        });
+
+        it("2.1.3 select hunting_grounds assigns item", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Remove existing hunting_grounds item
+          const existingHG = getOwnedItemByType(actor, "hunting_grounds");
+          if (existingHG) {
+            await actor.deleteEmbeddedDocuments("Item", [existingHG.id]);
+          }
+
+          const selector = findSmartItemSelector(root, "hunting_grounds");
+          if (!selector) {
+            this.skip();
+            return;
+          }
+
+          // Click the selector
+          selector.click();
+
+          // Wait for dialog
+          const dialog = await waitForCardDialog(3000);
+          if (!dialog) {
+            this.skip();
+            return;
+          }
+
+          const dialogEl = dialog.element;
+          const radioInputs = dialogEl.querySelectorAll("input[name='selectionId']");
+
+          if (!radioInputs || radioInputs.length === 0) {
+            await dialog.close();
+            this.skip();
+            return;
+          }
+
+          // Click the first radio input
+          const firstRadio = radioInputs[0];
+          const label = firstRadio.closest("label");
+          if (label) {
+            label.click();
+          } else {
+            firstRadio.click();
+          }
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // Click OK button
+          const okButton = dialogEl.querySelector(
+            'button[data-action="ok"], button[data-button="confirm"]'
+          );
+          if (!okButton) {
+            await dialog.close();
+            this.skip();
+            return;
+          }
+
+          okButton.click();
+
+          // Wait for update
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // CRITICAL: Verify item was created in actor
+          const newHG = getOwnedItemByType(actor, "hunting_grounds");
+          assert.ok(newHG, "hunting_grounds item should be created after selection");
         });
       });
 
@@ -450,6 +524,107 @@ Hooks.on("quenchReady", (quench) => {
           } else if (textDialog) {
             await textDialog.close();
           }
+        });
+
+        it("2.1.5 heritage selection persists to actor.system", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Clear existing heritage
+          const initialHeritage = actor.system?.heritage;
+          if (initialHeritage) {
+            await actor.update({ "system.heritage": "" });
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          const field = findSmartEditField(root, "system.heritage");
+          if (!field) {
+            this.skip();
+            return;
+          }
+
+          // Click the field
+          field.click();
+
+          // Wait for dialog
+          const cardDialog = await waitForCardDialog(2000);
+          const textDialog = cardDialog ? null : await waitForDialog(1000);
+
+          if (!cardDialog && !textDialog) {
+            this.skip();
+            return;
+          }
+
+          if (cardDialog) {
+            // Card selector - pick first option
+            const dialogEl = cardDialog.element;
+            const radioInputs = dialogEl.querySelectorAll("input[name='selectionId']");
+
+            if (radioInputs && radioInputs.length > 0) {
+              const firstRadio = radioInputs[0];
+              const label = firstRadio.closest("label");
+              if (label) label.click();
+              else firstRadio.click();
+              await new Promise((resolve) => setTimeout(resolve, 100));
+
+              const okButton = dialogEl.querySelector(
+                'button[data-action="ok"], button[data-button="confirm"]'
+              );
+              if (okButton) {
+                okButton.click();
+                await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+                await new Promise((resolve) => setTimeout(resolve, 300));
+              } else {
+                await cardDialog.close();
+                this.skip();
+                return;
+              }
+            } else {
+              await cardDialog.close();
+              this.skip();
+              return;
+            }
+          } else if (textDialog) {
+            // Text dialog - enter a value
+            const dialogEl = textDialog.element?.[0] || textDialog.element;
+            const input = dialogEl?.querySelector("input[type='text'], input[name='value']");
+            if (input) {
+              input.value = "Test Heritage Value";
+              input.dispatchEvent(new Event("input", { bubbles: true }));
+              await new Promise((resolve) => setTimeout(resolve, 100));
+
+              // Click OK/submit
+              const okButton = dialogEl.querySelector('button[data-button="confirm"], button[type="submit"]');
+              if (okButton) {
+                okButton.click();
+                await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+                await new Promise((resolve) => setTimeout(resolve, 300));
+              } else {
+                await textDialog.close();
+                this.skip();
+                return;
+              }
+            } else {
+              await textDialog.close();
+              this.skip();
+              return;
+            }
+          }
+
+          // CRITICAL: Verify actor.system.heritage was updated
+          const newHeritage = actor.system?.heritage;
+          assert.ok(
+            newHeritage && newHeritage.length > 0,
+            `actor.system.heritage should be set after selection (got: "${newHeritage}")`
+          );
         });
       });
 

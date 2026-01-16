@@ -9,6 +9,8 @@ import {
   ensureSheet,
   isTargetModuleActive,
   closeAllDialogs,
+  cleanupTestActor,
+  testCleanup,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -61,9 +63,13 @@ function clearCache() {
  */
 async function measureRenderTime(actor) {
   // Close sheet if open
-  if (actor.sheet?.rendered) {
-    await actor.sheet.close();
-    await new Promise((resolve) => setTimeout(resolve, 100));
+  try {
+    if (actor.sheet) {
+      await actor.sheet.close();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  } catch {
+    // Ignore close errors
   }
 
   const start = performance.now();
@@ -113,34 +119,38 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         afterEach(async function () {
-          this.timeout(5000);
-          await closeAllDialogs();
+          this.timeout(8000);
+
+          // Clean up test item first
           if (testItem) {
-            await testItem.delete();
+            try {
+              await testItem.delete();
+            } catch {
+              // Ignore delete errors
+            }
             testItem = null;
           }
-          if (actor) {
-            // Always try to close the sheet, even if rendered flag is false
-            try {
-              if (actor.sheet) {
-                await actor.sheet.close();
-                await new Promise((resolve) => setTimeout(resolve, 100));
-              }
-            } catch {
-              // Ignore close errors
-            }
-            await actor.delete();
-            actor = null;
-          }
+
+          // Use unified cleanup helper
+          await testCleanup({ actors: [actor] });
+          actor = null;
         });
 
-        it("8.1.0 cache system is accessible", async function () {
-          const utils = getUtils();
+        it("8.1.0 sheet renders successfully (cache is internal)", async function () {
+          // Note: The cache system is internal to the module and not publicly exposed.
+          // This test verifies the sheet renders successfully, which exercises the cache.
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
 
-          // The module should have some caching mechanism
           assert.ok(
-            utils !== null || true,
-            "Utils or caching system should be accessible (or tests use alternative approach)"
+            root !== null,
+            "Sheet should render successfully (cache is used internally)"
+          );
+
+          // Verify the sheet has the expected structure
+          assert.ok(
+            root.classList.contains("blades-alt") || root.querySelector(".blades-alt"),
+            "Sheet should have blades-alt styling"
           );
         });
 
@@ -153,15 +163,13 @@ Hooks.on("quenchReady", (quench) => {
 
           const statsBefore = getCacheStats();
 
-          // Note: We cannot easily test compendium item updates because:
-          // 1. Compendium items require pack context that's hard to mock
-          // 2. Calling Hooks.callAll with mock items triggers real hook handlers
-          //    that expect valid document structures
-          // This test verifies the cache system is accessible and that
-          // opening a sheet populates it correctly.
+          // Note: We cannot easily test compendium item updates because compendium
+          // items require pack context that's hard to mock. This test verifies
+          // the sheet renders correctly (which uses the cache).
+          const root = actor.sheet.element?.[0] || actor.sheet.element;
           assert.ok(
-            statsBefore !== null || true,
-            "Cache system should be accessible after sheet render"
+            root !== null,
+            "Sheet should render successfully (using cache)"
           );
         });
 
@@ -180,11 +188,16 @@ Hooks.on("quenchReady", (quench) => {
           // Re-render sheet to verify it picks up new items
           await actor.sheet.close();
           await new Promise((resolve) => setTimeout(resolve, 100));
-          await ensureSheet(actor);
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
 
           assert.ok(
-            true,
-            "World item creation completed (cache invalidation expected)"
+            root !== null,
+            "Sheet should re-render after world item creation"
+          );
+          assert.ok(
+            testItem !== null,
+            "World item should be created successfully"
           );
         });
 
@@ -207,9 +220,15 @@ Hooks.on("quenchReady", (quench) => {
           await actor.sheet.render(false);
           await new Promise((resolve) => setTimeout(resolve, 200));
 
+          const root = actor.sheet.element?.[0] || actor.sheet.element;
           assert.ok(
-            true,
-            "World item update completed (cache invalidation expected)"
+            root !== null,
+            "Sheet should re-render after world item update"
+          );
+          assert.strictEqual(
+            testItem.name,
+            "Updated Test Ability",
+            "World item should be updated successfully"
           );
         });
 
@@ -233,9 +252,16 @@ Hooks.on("quenchReady", (quench) => {
           await actor.sheet.render(false);
           await new Promise((resolve) => setTimeout(resolve, 200));
 
+          const root = actor.sheet.element?.[0] || actor.sheet.element;
           assert.ok(
-            true,
-            "World item deletion completed (cache invalidation expected)"
+            root !== null,
+            "Sheet should re-render after world item deletion"
+          );
+          // Verify item was deleted (testItem is now null)
+          assert.strictEqual(
+            testItem,
+            null,
+            "World item should be deleted"
           );
         });
 
@@ -282,20 +308,8 @@ Hooks.on("quenchReady", (quench) => {
 
         afterEach(async function () {
           this.timeout(5000);
-          await closeAllDialogs();
-          if (actor) {
-            // Always try to close the sheet, even if rendered flag is false
-            try {
-              if (actor.sheet) {
-                await actor.sheet.close();
-                await new Promise((resolve) => setTimeout(resolve, 100));
-              }
-            } catch {
-              // Ignore close errors
-            }
-            await actor.delete();
-            actor = null;
-          }
+          await testCleanup({ actors: [actor] });
+          actor = null;
         });
 
         it("8.2.1 second sheet render faster than first (cache hit)", async function () {
@@ -358,10 +372,7 @@ Hooks.on("quenchReady", (quench) => {
               "Second actor should benefit from shared cache"
             );
           } finally {
-            if (actor2.sheet?.rendered) {
-              await actor2.sheet.close();
-            }
-            await actor2.delete();
+            await cleanupTestActor(actor2);
           }
         });
       });

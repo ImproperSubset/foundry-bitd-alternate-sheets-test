@@ -136,8 +136,13 @@ Hooks.on("quenchReady", (quench) => {
           if (consoleTracker) consoleTracker.restore();
 
           if (actor) {
-            if (actor.sheet?.rendered) {
-              await actor.sheet.close();
+            try {
+              if (actor.sheet) {
+                await actor.sheet.close();
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
+            } catch {
+              // Ignore close errors
             }
             await actor.delete();
             actor = null;
@@ -316,10 +321,16 @@ Hooks.on("quenchReady", (quench) => {
             await new Promise((resolve) => setTimeout(resolve, 100));
           }
 
+          // CRITICAL: Capture initial item count before operation
+          const itemCountBefore = actor.items.size;
+
           // Perform a valid operation (toggle an ability if available)
           const checkboxes = findAbilityCheckboxes(root);
+          let abilityName = null;
           if (checkboxes.length > 0) {
             const checkbox = checkboxes[0];
+            abilityName = checkbox.dataset?.itemName ||
+                          checkbox.closest("[data-item-name]")?.dataset?.itemName;
             checkbox.click();
             await new Promise((resolve) => setTimeout(resolve, 500));
           }
@@ -333,6 +344,26 @@ Hooks.on("quenchReady", (quench) => {
             0,
             "Successful operations should not show error notifications"
           );
+
+          // CRITICAL: Verify actor.items was actually updated (if we clicked something)
+          if (checkboxes.length > 0) {
+            const itemCountAfter = actor.items.size;
+            assert.ok(
+              itemCountAfter > itemCountBefore,
+              `Actor.items.size should increase after successful ability toggle (was ${itemCountBefore}, now ${itemCountAfter})`
+            );
+
+            // Verify the specific ability was created if we know its name
+            if (abilityName) {
+              const hasAbility = actor.items.some(i => i.type === "crew_ability" && i.name === abilityName);
+              assert.ok(
+                hasAbility,
+                `Actor should now have ability "${abilityName}" in actor.items`
+              );
+            }
+
+            console.log(`[ErrorHandling Test] Successful operation created item: items ${itemCountBefore} → ${itemCountAfter}`);
+          }
         });
 
         it("10.2.1 failed upgrade toggle shows user notification", async function () {
@@ -354,14 +385,9 @@ Hooks.on("quenchReady", (quench) => {
           const upgradeCheckboxes = findUpgradeCheckboxes(root);
 
           if (upgradeCheckboxes.length === 0) {
-            // Verify upgrade section exists even if no checkboxes
-            const upgradeSection = root.querySelector(
-              ".upgrades, .crew-upgrades, [data-section='upgrades']"
-            );
-            assert.ok(
-              upgradeSection !== null || true,
-              "Upgrade section exists (or not applicable)"
-            );
+            // No upgrade checkboxes found - skip this test
+            console.log("[ErrorHandling Test] No upgrade checkboxes found");
+            this.skip();
             return;
           }
 
@@ -393,14 +419,9 @@ Hooks.on("quenchReady", (quench) => {
           const abilityCheckboxes = findAbilityCheckboxes(root);
 
           if (abilityCheckboxes.length === 0) {
-            // Verify ability section exists
-            const abilitySection = root.querySelector(
-              ".abilities, .crew-abilities, [data-section='abilities']"
-            );
-            assert.ok(
-              abilitySection !== null || true,
-              "Ability section exists (or not applicable)"
-            );
+            // No ability checkboxes found - skip this test
+            console.log("[ErrorHandling Test] No ability checkboxes found");
+            this.skip();
             return;
           }
 

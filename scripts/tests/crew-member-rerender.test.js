@@ -189,6 +189,15 @@ Hooks.on("quenchReady", (quench) => {
           await waitForActorUpdate(crewActor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 500));
 
+          // CRITICAL: Verify the upgrade was actually created in crew actor
+          const hasUpgrade = crewActor.items.some(
+            (i) => i.type === "crew_upgrade" && i.name === upgrade.name
+          );
+          assert.ok(
+            hasUpgrade,
+            `Crew should have upgrade "${upgrade.name}" in actor.items after checkbox toggle`
+          );
+
           // Verify member sheet was re-rendered
           assert.ok(
             memberTracker.wasRendered(),
@@ -226,6 +235,15 @@ Hooks.on("quenchReady", (quench) => {
           // Wait for the crew update
           await waitForActorUpdate(crewActor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // CRITICAL: Verify the upgrade was actually created in crew actor
+          const hasUpgrade = crewActor.items.some(
+            (i) => i.type === "crew_upgrade" && i.name === upgrade.name
+          );
+          assert.ok(
+            hasUpgrade,
+            `Crew should have upgrade "${upgrade.name}" in actor.items after checkbox toggle`
+          );
 
           // Verify non-member sheet was NOT re-rendered
           assert.ok(
@@ -265,6 +283,15 @@ Hooks.on("quenchReady", (quench) => {
           // Wait for the crew update
           await waitForActorUpdate(crewActor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // CRITICAL: Verify the upgrade was actually created in crew actor
+          const hasUpgrade = crewActor.items.some(
+            (i) => i.type === "crew_upgrade" && i.name === upgrade.name
+          );
+          assert.ok(
+            hasUpgrade,
+            `Crew should have upgrade "${upgrade.name}" in actor.items after checkbox toggle`
+          );
 
           // Verify closed member sheet was NOT re-rendered
           // (The implementation checks sheet.rendered before calling render)
