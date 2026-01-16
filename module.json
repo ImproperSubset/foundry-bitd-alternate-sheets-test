@@ -38,6 +38,19 @@
   },
   "esmodules": [
     "scripts/module.js",
-    "scripts/tests/teeth.test.js"
+    "scripts/tests/teeth.test.js",
+    "scripts/tests/crew-radio-toggle.test.js",
+    "scripts/tests/edit-mode.test.js",
+    "scripts/tests/healing-clock.test.js",
+    "scripts/tests/crew-sheet.test.js",
+    "scripts/tests/crew-member-rerender.test.js",
+    "scripts/tests/smart-fields.test.js",
+    "scripts/tests/global-clocks.test.js",
+    "scripts/tests/update-queue.test.js",
+    "scripts/tests/acquaintances.test.js",
+    "scripts/tests/compendium-cache.test.js",
+    "scripts/tests/npc-integration.test.js",
+    "scripts/tests/error-handling.test.js",
+    "scripts/tests/binary-checkboxes.test.js"
   ]
 }

@@ -282,3 +282,215 @@ export async function setAttributeExp(actor, attribute, value) {
 export function isTargetModuleActive() {
   return game?.modules?.get(TARGET_MODULE_ID)?.active ?? false;
 }
+
+/**
+ * Close all open dialogs and applications.
+ * Handles both V1 apps in ui.windows and V2 DialogV2 native <dialog> elements.
+ */
+export async function closeAllDialogs() {
+  // Close V1 apps in ui.windows (but not actor sheets - those are handled separately)
+  for (const app of Object.values(ui.windows)) {
+    if (app.rendered && !(app instanceof ActorSheet) && !(app instanceof ItemSheet)) {
+      try {
+        await app.close();
+      } catch {
+        // Ignore errors
+      }
+    }
+  }
+
+  // Close V2 DialogV2 elements (native <dialog> in DOM)
+  const v2Dialogs = document.querySelectorAll("dialog[open]");
+  for (const dialog of v2Dialogs) {
+    try {
+      dialog.close();
+    } catch {
+      // Ignore errors
+    }
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}
+
+// ============================================================================
+// Crew Actor Utilities
+// ============================================================================
+
+/**
+ * Find a crew_type item in compendia.
+ * @param {string} crewTypeName - Optional crew type name to find specifically
+ * @returns {Promise<Item|null>}
+ */
+export async function findCrewTypeItem(crewTypeName) {
+  const packs = Array.from(game.packs.values()).filter(
+    (pack) => pack.documentName === "Item"
+  );
+  const normalized = crewTypeName?.toLowerCase?.() || null;
+  let fallback = null;
+
+  for (const pack of packs) {
+    const index = await pack.getIndex({ fields: ["type", "name"] });
+    if (normalized) {
+      const exact = index.find(
+        (doc) =>
+          doc.type === "crew_type" && doc.name?.toLowerCase?.() === normalized
+      );
+      if (exact) {
+        return pack.getDocument(exact._id);
+      }
+    }
+
+    const entry = index.find((doc) => doc.type === "crew_type");
+    if (entry && !fallback) {
+      fallback = { pack, entry };
+    }
+  }
+
+  if (fallback) {
+    return fallback.pack.getDocument(fallback.entry._id);
+  }
+
+  return null;
+}
+
+/**
+ * Create a test crew actor with optional crew type.
+ * @param {object} options - Options
+ * @param {string} options.name - Actor name (default: auto-generated)
+ * @param {string} options.crewTypeName - Crew type to assign
+ * @returns {Promise<{actor: Actor, crewTypeItem: Item|null}>}
+ */
+export async function createTestCrewActor({ name, crewTypeName } = {}) {
+  const actorName = name || `Alt Sheets Test Crew ${Date.now()}`;
+  const actor = await Actor.create({ name: actorName, type: "crew" });
+  if (!actor) {
+    throw new Error("Failed to create test crew actor");
+  }
+
+  let crewTypeItem = null;
+  if (crewTypeName) {
+    const crewType = await findCrewTypeItem(crewTypeName);
+    if (crewType) {
+      const crewTypeData = crewType.toObject();
+      delete crewTypeData._id;
+      const [createdCrewType] = await actor.createEmbeddedDocuments("Item", [
+        crewTypeData,
+      ]);
+      crewTypeItem = createdCrewType;
+    }
+  }
+
+  await ensureSheet(actor);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  return { actor, crewTypeItem };
+}
+
+/**
+ * Get the max value for a crew stat (tier, heat, wanted, rep).
+ * @param {Actor} actor - The crew actor
+ * @param {string} stat - Stat name (tier, heat, wanted, rep)
+ * @returns {number}
+ */
+export function getCrewStatMax(actor, stat) {
+  const raw = foundry.utils.getProperty(actor.system, `max.${stat}`);
+  const parsed = Number(raw);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * Get the current value for a crew stat.
+ * @param {Actor} actor - The crew actor
+ * @param {string} stat - Stat name (tier, heat, wanted, reputation)
+ * @returns {number}
+ */
+export function getCrewStat(actor, stat) {
+  const raw = foundry.utils.getProperty(actor.system, stat);
+  const parsed = Number(raw);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * Set a crew stat value directly.
+ * @param {Actor} actor - The crew actor
+ * @param {string} stat - Stat name (tier, heat, wanted, reputation)
+ * @param {number} value - Value to set
+ */
+export async function setCrewStat(actor, stat, value) {
+  await actor.update({ [`system.${stat}`]: value });
+  const sheet = await ensureSheet(actor);
+  await sheet.render(false);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * Get the lit/unlit state of crew stat teeth from the DOM.
+ * Uses the input's checked state since CSS uses input:checked ~ label selectors.
+ * @param {HTMLElement} root - Sheet root element
+ * @param {string} actorId - Actor ID
+ * @param {string} stat - Stat name (tier, heat, wanted)
+ * @param {number} max - Maximum number of teeth
+ * @returns {Array<{value: number, lit: boolean}>}
+ */
+export function getCrewTeethState(root, actorId, stat, max) {
+  const teeth = [];
+  // wanted uses "wanted-counter" in the ID, others use the stat name directly
+  const idPrefix = stat === "wanted" ? "wanted-counter" : stat;
+
+  // Find the checked input to determine current value
+  // Radio inputs with same name - the checked one determines current value
+  const checkedInput = root.querySelector(
+    `input[name="system.${stat}"]:checked`
+  );
+  const currentValue = checkedInput ? parseInt(checkedInput.value) || 0 : 0;
+
+  for (let value = 1; value <= max; value += 1) {
+    // A tooth is "lit" if its value is <= the current checked value
+    teeth.push({ value, lit: value <= currentValue });
+  }
+  return teeth;
+}
+
+/**
+ * Click a crew stat tooth and wait for the update.
+ * Dispatches mousedown on the label element since that's where the handler is attached.
+ * @param {object} options - Options
+ * @param {Actor} options.actor - The crew actor
+ * @param {string} options.stat - Stat name (tier, heat, wanted)
+ * @param {number} options.value - Tooth value to click
+ * @param {number} options.timeoutMs - Timeout for update (default 1000)
+ * @returns {Promise<{statValue: number, teeth: Array, updateTimedOut: boolean}>}
+ */
+export async function applyCrewToothClick({ actor, stat, value, timeoutMs = 1000 }) {
+  const sheet = await ensureSheet(actor);
+  const root = sheet.element?.[0] || sheet.element;
+  if (!root) {
+    throw new Error("Sheet DOM not available");
+  }
+
+  // wanted uses "wanted-counter" in the ID, others use the stat name directly
+  const idPrefix = stat === "wanted" ? "wanted-counter" : stat;
+  const id = `crew-${actor.id}-${idPrefix}-${value}`;
+
+  // Find the label that targets this input - the mousedown handler is on label.radio-toggle
+  const label = root.querySelector(`label.radio-toggle[for="${id}"]`);
+  if (!label) {
+    throw new Error(`Missing crew tooth label for ${stat} ${value} (for: ${id})`);
+  }
+
+  let updateTimedOut = false;
+  const updatePromise = waitForActorUpdate(actor, { timeoutMs }).catch(() => {
+    updateTimedOut = true;
+  });
+
+  // Dispatch mousedown on the label - this is what the handler listens for
+  label.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  await updatePromise;
+  await sheet.render(false);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const statValue = foundry.utils.getProperty(actor.system, stat);
+  const max = getCrewStatMax(actor, stat);
+  const teeth = getCrewTeethState(root, actor.id, stat, max);
+
+  return { statValue, teeth, updateTimedOut };
+}

@@ -33,7 +33,10 @@ Hooks.on("quenchReady", (quench) => {
 
       beforeEach(async function () {
         this.timeout(10000);
-        const result = await createTestActor({ playbookName: "Cutter" });
+        const result = await createTestActor({
+          name: "Teeth-XP-Test",
+          playbookName: "Cutter"
+        });
         actor = result.actor;
         playbookItem = result.playbookItem;
       });
@@ -41,9 +44,13 @@ Hooks.on("quenchReady", (quench) => {
       afterEach(async function () {
         this.timeout(5000);
         if (actor) {
-          // Close sheet first to avoid orphaned UI
-          if (actor.sheet?.rendered) {
-            await actor.sheet.close();
+          try {
+            if (actor.sheet) {
+              await actor.sheet.close();
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+          } catch {
+            // Ignore close errors
           }
           await actor.delete();
           actor = null;
