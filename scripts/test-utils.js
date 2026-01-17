@@ -1120,6 +1120,9 @@ export async function testCleanup({ actors = [], settings = null } = {}) {
   // Final dialog sweep
   await closeAllDialogs();
 
+  // Clear any notifications that accumulated during tests
+  clearNotifications();
+
   // Restore settings if provided
   if (settings?.moduleId && settings?.values) {
     for (const [key, value] of Object.entries(settings.values)) {
@@ -1131,6 +1134,26 @@ export async function testCleanup({ actors = [], settings = null } = {}) {
         }
       }
     }
+  }
+}
+
+/**
+ * Clear all active notifications from the UI.
+ * Useful for cleaning up error notifications generated during tests.
+ */
+export function clearNotifications() {
+  try {
+    // Clear the notification queue
+    if (ui.notifications?.queue) {
+      ui.notifications.queue.length = 0;
+    }
+    // Remove active notification elements from the DOM
+    const container = document.getElementById("notifications");
+    if (container) {
+      container.querySelectorAll(".notification").forEach((el) => el.remove());
+    }
+  } catch {
+    // Ignore errors during notification cleanup
   }
 }
 
