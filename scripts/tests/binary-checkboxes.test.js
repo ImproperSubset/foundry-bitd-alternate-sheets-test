@@ -1078,22 +1078,45 @@ Hooks.on("quenchReady", (quench) => {
           console.log(`[LoadPill Test] Starting load: ${currentLoad}/${maxLoad}`);
 
           // Equip items until we reach max load
-          const gearItems = findGearItems(root);
+          // IMPORTANT: Re-query items after each click to avoid stale DOM references
           let totalEquipped = currentLoad;
+          let itemsProcessed = 0;
+          const maxIterations = 20; // Safety limit
 
-          for (const item of gearItems) {
-            if (totalEquipped >= maxLoad) break;
-            if (!isItemSelected(item)) {
-              const checkbox = item.querySelector("input[type='checkbox']");
-              const itemLoad = getItemLoad(item) || 1;
+          while (totalEquipped < maxLoad && itemsProcessed < maxIterations) {
+            // Re-render and re-query fresh gear items each iteration
+            await sheet.render(true);
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            root = sheet.element?.[0] || sheet.element;
 
-              if (checkbox && totalEquipped + itemLoad <= maxLoad) {
-                checkbox.click();
-                await waitForActorUpdate(actor, { timeoutMs: 1500 }).catch(() => {});
-                await new Promise((resolve) => setTimeout(resolve, 200));
-                totalEquipped += itemLoad;
-                console.log(`[LoadPill Test] Equipped item, load now: ${totalEquipped}/${maxLoad}`);
+            const gearItems = findGearItems(root);
+            let foundUnequipped = false;
+
+            for (const item of gearItems) {
+              if (!isItemSelected(item)) {
+                const checkbox = item.querySelector("input[type='checkbox']");
+                const itemLoad = getItemLoad(item) || 1;
+
+                if (checkbox && totalEquipped + itemLoad <= maxLoad) {
+                  const itemName = item.dataset?.itemName || "unknown";
+                  console.log(`[LoadPill Test] Equipping "${itemName}" (load ${itemLoad})`);
+
+                  checkbox.click();
+                  await waitForActorUpdate(actor, { timeoutMs: 1500 }).catch(() => {});
+                  await new Promise((resolve) => setTimeout(resolve, 200));
+
+                  totalEquipped += itemLoad;
+                  foundUnequipped = true;
+                  console.log(`[LoadPill Test] Total load now: ${totalEquipped}/${maxLoad}`);
+                  break; // Re-query after each click
+                }
               }
+            }
+
+            itemsProcessed++;
+            if (!foundUnequipped) {
+              console.log("[LoadPill Test] No more suitable items found for at-max test");
+              break;
             }
           }
 
