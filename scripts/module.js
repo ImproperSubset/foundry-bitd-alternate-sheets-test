@@ -134,14 +134,22 @@ Hooks.on("quenchReports", (report) => {
         !t.fullTitle?.includes("[DISABLED]") && !t.title?.includes("[DISABLED]")
       );
 
+      // Calculate total tests
+      const passed = stats.passes || 0;
+      const failed = stats.failures || 0;
+      const skipped = unexpectedSkips.length;
+      const disabled = disabledTests.length;
+      const total = passed + failed + skipped + disabled;
+
       console.log("\n\n%c════════════════════════════════════════════════════════════", "color: #888;");
       console.log("%c                    QUENCH TEST SUMMARY", "font-weight: bold; font-size: 14px;");
       console.log("%c════════════════════════════════════════════════════════════", "color: #888;");
-      console.log(`  Passed:   %c${stats.passes || 0}`, "color: green;");
-      console.log(`  Failed:   %c${stats.failures || 0}`, stats.failures ? "color: red; font-weight: bold;" : "color: green;");
-      console.log(`  Skipped:  %c${unexpectedSkips.length}`, unexpectedSkips.length ? "color: orange;" : "color: inherit;");
-      if (disabledTests.length > 0) {
-        console.log(`  Disabled: %c${disabledTests.length}`, "color: #888;");
+      console.log(`  Total:    %c${total}`, "color: inherit;");
+      console.log(`  Passed:   %c${passed}`, "color: green;");
+      console.log(`  Failed:   %c${failed}`, failed ? "color: red; font-weight: bold;" : "color: green;");
+      console.log(`  Skipped:  %c${skipped}`, skipped ? "color: orange;" : "color: inherit;");
+      if (disabled > 0) {
+        console.log(`  Disabled: %c${disabled}`, "color: #888;");
       }
       console.log(`  Duration: ${stats.duration || 0}ms`);
 
@@ -178,12 +186,12 @@ Hooks.on("quenchReports", (report) => {
 
       // Final status line
       console.log("%c════════════════════════════════════════════════════════════", "color: #888;");
-      if (stats.failures > 0) {
-        console.log(`%c✗ ${stats.failures} test(s) failed`, "color: red; font-weight: bold; font-size: 12px;");
-      } else if (stats.passes > 0 && unexpectedSkips.length > 0) {
-        console.log(`%c✓ All run tests passed (%c${unexpectedSkips.length} skipped%c)`, "color: green; font-weight: bold; font-size: 12px;", "color: orange; font-weight: bold;", "color: green;");
-      } else if (stats.passes > 0) {
-        console.log("%c✓ All tests passed!", "color: green; font-weight: bold; font-size: 12px;");
+      if (failed > 0) {
+        console.log(`%c✗ ${failed} of ${total} test(s) failed`, "color: red; font-weight: bold; font-size: 12px;");
+      } else if (passed > 0 && skipped > 0) {
+        console.log(`%c✓ ${passed} of ${total} tests passed (%c${skipped} skipped%c)`, "color: green; font-weight: bold; font-size: 12px;", "color: orange; font-weight: bold;", "color: green;");
+      } else if (passed > 0) {
+        console.log(`%c✓ ${passed} of ${total} tests passed!`, "color: green; font-weight: bold; font-size: 12px;");
       }
       console.log("%c════════════════════════════════════════════════════════════\n", "color: #888;");
 
