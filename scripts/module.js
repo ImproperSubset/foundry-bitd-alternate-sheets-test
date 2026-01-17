@@ -147,7 +147,7 @@ Hooks.on("quenchReports", (report) => {
       console.log(`  Total:    %c${total}`, "color: inherit;");
       console.log(`  Passed:   %c${passed}`, "color: green;");
       console.log(`  Failed:   %c${failed}`, failed ? "color: red; font-weight: bold;" : "color: green;");
-      console.log(`  Skipped:  %c${skipped}`, skipped ? "color: orange;" : "color: inherit;");
+      console.log(`  Skipped:  %c${skipped}`, skipped > 0 ? "color: orange;" : "color: #888;");
       if (disabled > 0) {
         console.log(`  Disabled: %c${disabled}`, "color: #888;");
       }
