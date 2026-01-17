@@ -10,6 +10,8 @@ import {
   isTargetModuleActive,
   closeAllDialogs,
   TestNumberer,
+  assertExists,
+  assertNotEmpty,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -236,10 +238,9 @@ Hooks.on("quenchReady", (quench) => {
           const gearItems = findGearItems(root);
           const binaryCheckboxes = findBinaryItemCheckboxes(root);
 
-          if (gearItems.length === 0 && binaryCheckboxes.length === 0) {
-            this.skip();
-            return;
-          }
+          // CRITICAL: Character sheet should have gear items - template may be broken
+          assertNotEmpty(assert, gearItems.length > 0 ? gearItems : binaryCheckboxes,
+            "Gear items or binary checkboxes should exist on character sheet - template may be broken");
 
           // Get initial load from DOM
           const initialLoad = getLoadValue(root) || 0;
@@ -279,8 +280,10 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
+          // NOTE: If all items are already equipped, we can't test equipping - legitimate skip
           if (!toggled) {
-            this.skip();
+            console.log("[BinaryCheckboxes Test] All items already equipped - cannot test equipping");
+            this.skip(); // Legitimate: all items pre-equipped
             return;
           }
 
@@ -342,11 +345,9 @@ Hooks.on("quenchReady", (quench) => {
 
           // Get initial load from DOM
           const initialLoad = getLoadValue(root);
-          if (initialLoad === null) {
-            console.log("[BinaryCheckboxes Test] Cannot read initial load value");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Load display should exist on character sheet (null means not found)
+          assert.ok(initialLoad !== null,
+            "Load value should be readable from character sheet - template may be broken");
 
           // Find an unequipped item with a known load value
           const gearItems = findGearItems(root);
@@ -379,9 +380,10 @@ Hooks.on("quenchReady", (quench) => {
           console.log(`[BinaryCheckboxes Test] ${unequippedCount} unequipped items`);
           console.log(`[BinaryCheckboxes Test] Item load values:`, loadInfo.slice(0, 5));
 
+          // NOTE: If no unequipped items with load > 0 exist, skip is legitimate
           if (!targetItem || !targetCheckbox || itemLoadValue === 0) {
-            console.log("[BinaryCheckboxes Test] No unequipped item with load > 0 found");
-            this.skip();
+            console.log("[BinaryCheckboxes Test] No unequipped item with load > 0 found - all may be equipped");
+            this.skip(); // Legitimate: test data state
             return;
           }
 
@@ -455,9 +457,10 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
+          // NOTE: If no unequipped items with load > 0 exist, skip is legitimate
           if (!targetItem || !targetCheckbox || itemLoadValue === 0) {
-            console.log("[BinaryCheckboxes Test] No unequipped item with load > 0 found");
-            this.skip();
+            console.log("[BinaryCheckboxes Test] No unequipped item with load > 0 found for unequip test");
+            this.skip(); // Legitimate: test data state
             return;
           }
 
@@ -492,11 +495,9 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
-          if (!targetCheckbox) {
-            console.log("[BinaryCheckboxes Test] Cannot find equipped item checkbox");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Equipped checkbox should be findable after re-render
+          assertExists(assert, targetCheckbox,
+            `Equipped item checkbox for "${itemId}" should be findable after re-render`);
 
           console.log(`[BinaryCheckboxes Test] Now unequipping "${itemName}"`);
 
@@ -588,10 +589,9 @@ Hooks.on("quenchReady", (quench) => {
 
           const binaryCheckboxes = findBinaryItemCheckboxes(root);
 
-          if (binaryCheckboxes.length === 0) {
-            this.skip();
-            return;
-          }
+          // CRITICAL: Character sheet should have binary checkboxes - template may be broken
+          assertNotEmpty(assert, binaryCheckboxes,
+            "Binary checkboxes should exist on character sheet - template may be broken");
 
           // Find an unchecked checkbox
           let targetCheckbox = null;
@@ -609,8 +609,10 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
+          // NOTE: If all items are already equipped, we can't test toggle - legitimate skip
           if (!targetCheckbox) {
-            this.skip();
+            console.log("[BinaryCheckboxes Test] All items already equipped - cannot test toggle");
+            this.skip(); // Legitimate: test data state
             return;
           }
 
@@ -676,10 +678,9 @@ Hooks.on("quenchReady", (quench) => {
 
           const binaryCheckboxes = findBinaryItemCheckboxes(root);
 
-          if (binaryCheckboxes.length === 0) {
-            this.skip();
-            return;
-          }
+          // CRITICAL: Character sheet should have binary checkboxes - template may be broken
+          assertNotEmpty(assert, binaryCheckboxes,
+            "Binary checkboxes should exist on character sheet - template may be broken");
 
           // Find a checked checkbox, or check one first then uncheck
           let targetCheckbox = null;
@@ -733,10 +734,9 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
-          if (!targetCheckbox) {
-            this.skip();
-            return;
-          }
+          // CRITICAL: Should have a checked checkbox after setup
+          assertExists(assert, targetCheckbox,
+            "Should have at least one checked checkbox for untoggle test");
 
           // CRITICAL: Get equipped items from actor flags before untoggle
           const equippedBefore = actor.getFlag(TARGET_MODULE_ID, "equipped-items") || {};
@@ -780,10 +780,9 @@ Hooks.on("quenchReady", (quench) => {
 
           const binaryCheckboxes = findBinaryItemCheckboxes(root);
 
-          if (binaryCheckboxes.length === 0) {
-            this.skip();
-            return;
-          }
+          // CRITICAL: Character sheet should have binary checkboxes - template may be broken
+          assertNotEmpty(assert, binaryCheckboxes,
+            "Binary checkboxes should exist on character sheet - template may be broken");
 
           // Verify checkboxes have a defined state
           let validStates = 0;

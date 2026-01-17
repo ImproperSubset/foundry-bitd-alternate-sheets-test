@@ -14,6 +14,7 @@ import {
   findClockInChat,
   waitForClockInChat,
   TestNumberer,
+  assertExists,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -179,10 +180,10 @@ Hooks.on("quenchReady", (quench) => {
           this.timeout(5000);
           clockActor = await createClockActor({ name: "Test Clock 4.1.0" });
 
+          // NOTE: Clock actor type depends on system configuration - legitimate skip if unavailable
           if (!clockActor) {
-            // Clock actor type not available in this system
             console.log("[GlobalClocks Test] Clock actor type not available");
-            this.skip();
+            this.skip(); // Legitimate: clock-actor-unavailable
             return;
           }
 
@@ -711,23 +712,21 @@ Hooks.on("quenchReady", (quench) => {
             }]
           });
 
-          if (!journal) {
-            console.log("[GlobalClocks Test] Could not create journal");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Journal creation should always succeed in Foundry
+          assertExists(assert, journal, "Journal creation should succeed");
 
           // Use helper to get journal sheet element (handles V12/V13 differences)
           const root = await getJournalSheetElement(journal);
 
+          // NOTE: Journal sheet element may not be found in all Foundry versions - legitimate skip
           if (!root) {
-            console.log("[GlobalClocks Test] Could not find journal sheet element");
+            console.log("[GlobalClocks Test] Could not find journal sheet element - V12/V13 differences");
             console.log("[GlobalClocks Test] ui.windows count:", Object.keys(ui.windows).length);
             // List all windows for debugging
             for (const [id, app] of Object.entries(ui.windows)) {
               console.log(`[GlobalClocks Test] Window ${id}: ${app.constructor.name}, doc=${app.document?.id}`);
             }
-            this.skip();
+            this.skip(); // Legitimate: v13-only-api
             return;
           }
 
@@ -778,17 +777,16 @@ Hooks.on("quenchReady", (quench) => {
             }]
           });
 
-          if (!journal) {
-            this.skip();
-            return;
-          }
+          // CRITICAL: Journal creation should always succeed in Foundry
+          assertExists(assert, journal, "Journal creation should succeed");
 
           // Use helper to get journal sheet element (handles V12/V13 differences)
           const root = await getJournalSheetElement(journal);
 
+          // NOTE: Journal sheet element may not be found in all Foundry versions - legitimate skip
           if (!root) {
-            console.log("[GlobalClocks Test] Could not find journal sheet element for click test");
-            this.skip();
+            console.log("[GlobalClocks Test] Could not find journal sheet element for click test - V12/V13 differences");
+            this.skip(); // Legitimate: v13-only-api
             return;
           }
 
@@ -852,17 +850,16 @@ Hooks.on("quenchReady", (quench) => {
             }]
           });
 
-          if (!journal) {
-            this.skip();
-            return;
-          }
+          // CRITICAL: Journal creation should always succeed in Foundry
+          assertExists(assert, journal, "Journal creation should succeed");
 
           // Use helper to get journal sheet element (handles V12/V13 differences)
           const root = await getJournalSheetElement(journal);
 
+          // NOTE: Journal sheet element may not be found in all Foundry versions - legitimate skip
           if (!root) {
-            console.log("[GlobalClocks Test] Could not find journal sheet element for decrement test");
-            this.skip();
+            console.log("[GlobalClocks Test] Could not find journal sheet element for decrement test - V12/V13 differences");
+            this.skip(); // Legitimate: v13-only-api
             return;
           }
 

@@ -13,6 +13,8 @@ import {
   closeAllDialogs,
   cleanupTestActor,
   TestNumberer,
+  assertExists,
+  assertNotEmpty,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -177,10 +179,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find an unchecked ability
           const checkboxes = root.querySelectorAll(".crew-ability-checkbox:not(:checked)");
-          if (checkboxes.length === 0) {
-            this.skip();
-            return;
-          }
+          // CRITICAL: Crew sheet should have unchecked ability checkboxes - template may be broken
+          assertNotEmpty(assert, checkboxes, "Crew ability checkboxes should exist - template may be broken");
 
           const checkbox = checkboxes[0];
           const abilityName = checkbox.dataset.itemName;
@@ -207,10 +207,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // First, ensure we have a checked ability
           const checkboxes = root.querySelectorAll(".crew-ability-checkbox:not(:checked)");
-          if (checkboxes.length === 0) {
-            this.skip();
-            return;
-          }
+          // CRITICAL: Need unchecked abilities to test toggle behavior
+          assertNotEmpty(assert, checkboxes, "Unchecked crew ability checkboxes should exist");
 
           const checkbox = checkboxes[0];
           const abilityName = checkbox.dataset.itemName;
@@ -230,10 +228,8 @@ Hooks.on("quenchReady", (quench) => {
           const newRoot = sheet.element?.[0] || sheet.element;
           const newCheckbox = findAbilityCheckbox(newRoot, abilityName);
 
-          if (!newCheckbox) {
-            this.skip();
-            return;
-          }
+          // CRITICAL: Checkbox should still exist after re-render
+          assertExists(assert, newCheckbox, `Ability checkbox for "${abilityName}" should exist after re-render`);
 
           newCheckbox.checked = false;
           newCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
@@ -254,10 +250,8 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
           const checkboxes = root.querySelectorAll(".crew-ability-checkbox:not(:checked)");
 
-          if (checkboxes.length === 0) {
-            this.skip();
-            return;
-          }
+          // CRITICAL: Need unchecked abilities for this test
+          assertNotEmpty(assert, checkboxes, "Unchecked crew ability checkboxes should exist for testing");
 
           const checkbox = checkboxes[0];
           const abilityName = checkbox.dataset.itemName;
@@ -304,8 +298,10 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
+          // NOTE: Single-cost upgrades depend on crew type - legitimate skip if none available
           if (!singleCostCheckbox) {
-            this.skip();
+            console.log("[CrewSheet Test] No single-cost upgrade found - crew type may not have any");
+            this.skip(); // Legitimate: crew-type-specific
             return;
           }
 
@@ -341,8 +337,10 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
+          // NOTE: Multi-cost upgrades depend on crew type - legitimate skip if none available
           if (!multiCostCheckbox) {
-            this.skip();
+            console.log("[CrewSheet Test] No multi-cost upgrade found - crew type may not have any");
+            this.skip(); // Legitimate: crew-type-specific
             return;
           }
 
@@ -385,8 +383,10 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
+          // NOTE: 2-cost upgrades depend on crew type - legitimate skip if none available
           if (!firstSlot || !secondSlot) {
-            this.skip();
+            console.log("[CrewSheet Test] No 2-cost upgrade found - crew type may not have any");
+            this.skip(); // Legitimate: crew-type-specific
             return;
           }
 
@@ -404,10 +404,8 @@ Hooks.on("quenchReady", (quench) => {
           const newRoot = sheet.element?.[0] || sheet.element;
           const newSecondSlot = findUpgradeCheckbox(newRoot, upgradeName, 2);
 
-          if (!newSecondSlot) {
-            this.skip();
-            return;
-          }
+          // CRITICAL: Second slot should exist after re-render if first slot was checked
+          assertExists(assert, newSecondSlot, `Second slot for upgrade "${upgradeName}" should exist after re-render`);
 
           newSecondSlot.checked = true;
           newSecondSlot.dispatchEvent(new Event("change", { bubbles: true }));
@@ -592,9 +590,10 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
+          // NOTE: Single-cost upgrades depend on crew type - legitimate skip if none available
           if (!singleCostCheckbox) {
-            console.log("[CrewSheet Test] No single-cost upgrade found");
-            this.skip();
+            console.log("[CrewSheet Test] No single-cost upgrade found - crew type may not have any");
+            this.skip(); // Legitimate: crew-type-specific
             return;
           }
 
@@ -620,11 +619,8 @@ Hooks.on("quenchReady", (quench) => {
           const newRoot = sheet.element?.[0] || sheet.element;
           const newCheckbox = findUpgradeCheckbox(newRoot, upgradeName, 1);
 
-          if (!newCheckbox) {
-            console.log("[CrewSheet Test] Could not find checkbox after re-render");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Checkbox should exist after re-render since we just checked it
+          assertExists(assert, newCheckbox, `Upgrade checkbox for "${upgradeName}" should exist after re-render`);
 
           newCheckbox.checked = false;
           newCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
@@ -670,9 +666,10 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
+          // NOTE: Multi-cost upgrades depend on crew type - legitimate skip if none available
           if (!firstSlot || !secondSlot) {
-            console.log("[CrewSheet Test] No multi-cost upgrade found");
-            this.skip();
+            console.log("[CrewSheet Test] No multi-cost upgrade found - crew type may not have any");
+            this.skip(); // Legitimate: crew-type-specific
             return;
           }
 
@@ -691,11 +688,8 @@ Hooks.on("quenchReady", (quench) => {
           const newRoot1 = sheet.element?.[0] || sheet.element;
           const newSecondSlot = findUpgradeCheckbox(newRoot1, upgradeName, 2);
 
-          if (!newSecondSlot) {
-            console.log("[CrewSheet Test] Could not find second slot after re-render");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Second slot should exist after re-render if first slot was checked
+          assertExists(assert, newSecondSlot, `Second slot for upgrade "${upgradeName}" should exist after re-render`);
 
           newSecondSlot.checked = true;
           newSecondSlot.dispatchEvent(new Event("change", { bubbles: true }));

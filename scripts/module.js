@@ -22,6 +22,8 @@
  * - bitd-alternate-sheets.npc-integration: NPC vice purveyors and playbook filtering
  * - bitd-alternate-sheets.error-handling: Null safety and error notifications
  * - bitd-alternate-sheets.binary-checkboxes: Binary item checkboxes and load pills
+ * - bitd-alternate-sheets.migration: Data migration for ability progress, equipped items, legacy fields
+ * - bitd-alternate-sheets.settings: Settings registration and cache invalidation
  */
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -103,6 +105,8 @@ Hooks.once("ready", () => {
   console.log(`  quench.runBatches("bitd-alternate-sheets.npc-integration")`);
   console.log(`  quench.runBatches("bitd-alternate-sheets.error-handling")`);
   console.log(`  quench.runBatches("bitd-alternate-sheets.binary-checkboxes")`);
+  console.log(`  quench.runBatches("bitd-alternate-sheets.migration")`);
+  console.log(`  quench.runBatches("bitd-alternate-sheets.settings")`);
   console.log(`  game.modules.get("${MODULE_ID}").api.runAllTests()`);
 });
 
@@ -147,7 +151,7 @@ Hooks.on("quenchReports", (report) => {
       console.log(`  Total:    %c${total}`, "color: inherit;");
       console.log(`  Passed:   %c${passed}`, "color: green;");
       console.log(`  Failed:   %c${failed}`, failed ? "color: red; font-weight: bold;" : "color: green;");
-      console.log(`  Skipped:  %c${skipped}`, skipped > 0 ? "color: orange;" : "color: #888;");
+      console.log(`  Skipped:  %c${skipped}`, skipped > 0 ? "color: orange;" : "color: green;");
       if (disabled > 0) {
         console.log(`  Disabled: %c${disabled}`, "color: #888;");
       }

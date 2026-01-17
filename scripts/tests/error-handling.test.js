@@ -11,6 +11,7 @@ import {
   waitForActorUpdate,
   expectedTestError,
   TestNumberer,
+  assertExists,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -194,6 +195,7 @@ Hooks.on("quenchReady", (quench) => {
           const inlineFields = findInlineEditFields(root);
 
           if (inlineFields.length === 0) {
+            // Legitimate: optional-feature - inline edit fields may not be present in all sheet configurations
             this.skip();
             return;
           }
@@ -244,6 +246,7 @@ Hooks.on("quenchReady", (quench) => {
           const radioToggles = findRadioToggles(root);
 
           if (radioToggles.length === 0) {
+            // Legitimate: optional-feature - radio toggles may not be present in all sheet configurations
             this.skip();
             return;
           }
@@ -390,8 +393,7 @@ Hooks.on("quenchReady", (quench) => {
           const upgradeCheckboxes = findUpgradeCheckboxes(root);
 
           if (upgradeCheckboxes.length === 0) {
-            // No upgrade checkboxes found - skip this test
-            console.log("[ErrorHandling Test] No upgrade checkboxes found");
+            // Legitimate: crew-type-specific - some crew types may not have upgrade checkboxes
             this.skip();
             return;
           }
@@ -424,8 +426,7 @@ Hooks.on("quenchReady", (quench) => {
           const abilityCheckboxes = findAbilityCheckboxes(root);
 
           if (abilityCheckboxes.length === 0) {
-            // No ability checkboxes found - skip this test
-            console.log("[ErrorHandling Test] No ability checkboxes found");
+            // Legitimate: crew-type-specific - some crew types may not have ability checkboxes
             this.skip();
             return;
           }
@@ -490,11 +491,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find a tooth to click
           const tooth = root.querySelector('label[for*="insight-1"], label[for*="exp"]');
-          if (!tooth) {
-            console.log("[ErrorHandling Test] No XP tooth found");
-            this.skip();
-            return;
-          }
+          assertExists(assert, tooth, "XP tooth should exist - character sheet template may be broken");
 
           const notificationsBefore = notificationTracker.notifications.length;
 
@@ -526,13 +523,10 @@ Hooks.on("quenchReady", (quench) => {
               `[ErrorHandling Test] Update failure triggered ${errorNotifications.length} error notification(s)`
             );
 
-            // If no error notification, the error was likely caught silently
-            // This is acceptable for some implementations, but we should at least verify
-            // the notification system was used if there was an error
+            // When we force an update failure, the module should show an error notification
             assert.ok(
-              errorNotifications.length > 0 ||
-                newNotifications.length === 0, // Silent handling is acceptable
-              "Error notification should appear on update failure OR error should be handled silently"
+              errorNotifications.length > 0,
+              "Error notification should appear when update fails"
             );
           } finally {
             // Always restore original update function
@@ -555,10 +549,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find a tooth to click
           const tooth = root.querySelector('label[for*="insight-1"], label[for*="exp"]');
-          if (!tooth) {
-            this.skip();
-            return;
-          }
+          assertExists(assert, tooth, "XP tooth should exist - character sheet template may be broken");
 
           // Stub actor.update to throw
           const originalUpdate = actor.update.bind(actor);

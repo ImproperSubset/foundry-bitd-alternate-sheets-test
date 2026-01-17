@@ -13,6 +13,9 @@ import {
   testCleanup,
   expectedTestError,
   TestNumberer,
+  assertExists,
+  assertNotEmpty,
+  isLegitimateSkip,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -104,10 +107,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find XP teeth for an attribute
           const insightLabel = root.querySelector('label[for*="insight-1"]');
-          if (!insightLabel) {
-            this.skip();
-            return;
-          }
+          assertExists(assert, insightLabel, "Insight tooth label should exist - character sheet template may be broken");
 
           // CRITICAL: Capture initial value before any updates
           const initialExp = actor.system?.attributes?.insight?.exp ?? 0;
@@ -185,6 +185,7 @@ Hooks.on("quenchReady", (quench) => {
             // Find multiple ability checkboxes
             const checkboxes = root.querySelectorAll(".crew-ability-checkbox:not(:checked)");
             if (checkboxes.length < 2) {
+              // Legitimate: test-data-state - all abilities may already be checked from previous test runs
               this.skip();
               return;
             }
@@ -342,10 +343,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find and click an XP tooth
           const label = root.querySelector('label[for*="insight-1"]');
-          if (!label) {
-            this.skip();
-            return;
-          }
+          assertExists(assert, label, "Insight tooth label should exist - character sheet template may be broken");
 
           // CRITICAL: Capture initial value before update
           const initialExp = actor.system?.attributes?.insight?.exp ?? 0;

@@ -178,6 +178,77 @@ export function expectedTestError(message) {
 }
 
 // ============================================================================
+// Assertion Helpers
+// ============================================================================
+
+/**
+ * Assert that an element exists and is not null/undefined.
+ * Use this instead of `this.skip()` for conditions that should always be true.
+ *
+ * @param {Function} assert - Chai assert function from test context
+ * @param {*} element - The element to check
+ * @param {string} message - Error message if element doesn't exist
+ * @throws {AssertionError} If element is falsy
+ *
+ * @example
+ * // BEFORE (silent skip - test reports as "passing"):
+ * if (!label) { this.skip(); return; }
+ *
+ * // AFTER (hard fail - test reports as "failed"):
+ * assertExists(assert, label, "XP tooth label should exist - template may be broken");
+ */
+export function assertExists(assert, element, message) {
+  assert.ok(element, message);
+}
+
+/**
+ * Assert that a collection has at least one element.
+ * Use this instead of `this.skip()` when checking for UI elements that should exist.
+ *
+ * @param {Function} assert - Chai assert function from test context
+ * @param {Array|NodeList|HTMLCollection} collection - The collection to check
+ * @param {string} message - Error message if collection is empty
+ * @throws {AssertionError} If collection is empty
+ *
+ * @example
+ * // BEFORE (silent skip):
+ * if (checkboxes.length === 0) { this.skip(); return; }
+ *
+ * // AFTER (hard fail):
+ * assertNotEmpty(assert, checkboxes, "Crew ability checkboxes should exist - template may be broken");
+ */
+export function assertNotEmpty(assert, collection, message) {
+  const length = collection?.length ?? 0;
+  assert.ok(length > 0, message);
+}
+
+/**
+ * Determine if a skip is legitimate (optional feature) or should be a hard failure.
+ * Returns true if this is a genuine optional feature (V13-only APIs, specific playbooks).
+ *
+ * Use this to document why a skip is acceptable:
+ * @example
+ * if (max < 5) {
+ *   // Legitimate skip: not all playbooks have 5+ teeth
+ *   if (!isLegitimateSkip("playbook-specific")) this.skip();
+ *   return;
+ * }
+ *
+ * @param {string} reason - The reason for the skip
+ * @returns {boolean} True if this is a legitimate skip reason
+ */
+export function isLegitimateSkip(reason) {
+  const legitimateReasons = [
+    "v13-only-api",           // Feature only available in V13+
+    "playbook-specific",      // Feature depends on specific playbook choice
+    "crew-type-specific",     // Feature depends on specific crew type
+    "optional-feature",       // Optional module feature that may be disabled
+    "clock-actor-unavailable" // Clock actor type not in system
+  ];
+  return legitimateReasons.includes(reason);
+}
+
+// ============================================================================
 // V13+ Compatibility Helpers
 // ============================================================================
 
