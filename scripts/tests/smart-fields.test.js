@@ -10,6 +10,7 @@ import {
   waitForActorUpdate,
   isTargetModuleActive,
   closeAllDialogs,
+  testCleanup,
   TestNumberer,
 } from "../test-utils.js";
 
@@ -659,29 +660,20 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         afterEach(async function () {
-          this.timeout(5000);
+          this.timeout(8000);
 
-          // Restore original settings first
-          if (originalFromCompendia !== undefined) {
-            await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", originalFromCompendia);
-          }
-          if (originalFromWorld !== undefined) {
-            await game.settings.set(TARGET_MODULE_ID, "populateFromWorld", originalFromWorld);
-          }
-
-          await closeAllDialogs();
-          if (actor) {
-            try {
-              if (actor.sheet) {
-                await actor.sheet.close();
-                await new Promise((resolve) => setTimeout(resolve, 100));
+          // Use unified cleanup with settings restoration
+          await testCleanup({
+            actors: [actor],
+            settings: {
+              moduleId: TARGET_MODULE_ID,
+              values: {
+                populateFromCompendia: originalFromCompendia,
+                populateFromWorld: originalFromWorld,
               }
-            } catch {
-              // Ignore close errors
             }
-            await actor.delete();
-            actor = null;
-          }
+          });
+          actor = null;
         });
 
         t.test("heritage field opens text dialog when no options available", async function () {
