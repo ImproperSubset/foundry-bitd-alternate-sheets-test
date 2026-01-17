@@ -504,7 +504,10 @@ export async function waitForClockElement(container, { timeoutMs = 5000 } = {}) 
  */
 export function findClockInChat(message) {
   // Try multiple selectors for chat log - Foundry VTT versions vary
-  const chatLog = document.getElementById("chat-log") ||
+  // V13 has TWO .chat-log elements - one hidden, one visible inside .chat-scroll
+  // Prioritize the visible one inside .chat-scroll
+  const chatLog = document.querySelector(".chat-scroll .chat-log") ||
+                  document.getElementById("chat-log") ||
                   document.querySelector("#chat-log") ||
                   document.querySelector(".chat-log") ||
                   document.querySelector("#chat .message-list");

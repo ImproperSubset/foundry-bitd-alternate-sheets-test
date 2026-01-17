@@ -7,7 +7,8 @@ import {
   createTestActor,
   ensureSheet,
   isTargetModuleActive,
-  cleanupTestActor,
+  testCleanup,
+  closeAllDialogs,
   TestNumberer,
 } from "../test-utils.js";
 
@@ -97,28 +98,24 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         afterEach(async function () {
-          this.timeout(8000);
+          this.timeout(12000);
 
-          // Restore settings to original values
-          try {
-            await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", originalSettings.populateFromCompendia);
-            await game.settings.set(TARGET_MODULE_ID, "populateFromWorld", originalSettings.populateFromWorld);
-            await game.settings.set(TARGET_MODULE_ID, "searchAllPacks", originalSettings.searchAllPacks);
-          } catch (err) {
-            console.warn(`[Settings Test] Failed to restore settings: ${err.message}`);
-          }
+          // Close any open dialogs first
+          await closeAllDialogs();
+          await new Promise(resolve => setTimeout(resolve, 100));
 
-          // Close sheet before cleanup to prevent orphans
-          if (actor?.sheet?.rendered) {
-            try {
-              await actor.sheet.close();
-              await new Promise(resolve => setTimeout(resolve, 100));
-            } catch {
-              // Ignore close errors
+          // Use full testCleanup for robust actor cleanup with settings restoration
+          await testCleanup({
+            actors: [actor],
+            settings: {
+              moduleId: TARGET_MODULE_ID,
+              values: originalSettings
             }
-          }
+          });
 
-          await cleanupTestActor(actor);
+          // Extra delay to ensure Foundry has fully processed cleanup
+          await new Promise(resolve => setTimeout(resolve, 300));
+
           actor = null;
         });
 

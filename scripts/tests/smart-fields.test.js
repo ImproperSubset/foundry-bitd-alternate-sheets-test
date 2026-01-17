@@ -1012,6 +1012,409 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
       });
+
+      t.section("Full Character Smart Field Configuration", () => {
+        let actor;
+
+        beforeEach(async function () {
+          this.timeout(10000);
+          const result = await createTestActor({
+            name: "SmartFields-FullConfig-Test",
+            playbookName: "Cutter",
+          });
+          actor = result.actor;
+        });
+
+        afterEach(async function () {
+          this.timeout(8000);
+
+          // Close any open dialogs
+          await closeAllDialogs();
+
+          // Close sheet
+          if (actor?.sheet?.rendered) {
+            try {
+              await actor.sheet.close();
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            } catch {
+              // Ignore
+            }
+          }
+
+          await testCleanup({ actors: [actor] });
+          actor = null;
+        });
+
+        t.test("can configure heritage via system.heritage", async function () {
+          this.timeout(8000);
+
+          const testHeritage = "Akoros";
+          await actor.update({ "system.heritage": testHeritage });
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          const sheet = await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Verify actor has heritage set
+          assert.strictEqual(
+            actor.system.heritage,
+            testHeritage,
+            `Heritage should be "${testHeritage}"`
+          );
+
+          // Verify sheet displays heritage
+          const root = sheet.element?.[0] || sheet.element;
+          const heritageText = root?.textContent || "";
+          assert.ok(
+            heritageText.includes(testHeritage),
+            `Sheet should display heritage "${testHeritage}"`
+          );
+        });
+
+        t.test("can configure background via system.background", async function () {
+          this.timeout(8000);
+
+          const testBackground = "Labor";
+          await actor.update({ "system.background": testBackground });
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          const sheet = await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          assert.strictEqual(
+            actor.system.background,
+            testBackground,
+            `Background should be "${testBackground}"`
+          );
+
+          const root = sheet.element?.[0] || sheet.element;
+          const backgroundText = root?.textContent || "";
+          assert.ok(
+            backgroundText.includes(testBackground),
+            `Sheet should display background "${testBackground}"`
+          );
+        });
+
+        t.test("can configure vice via system.vice", async function () {
+          this.timeout(8000);
+
+          const testVice = "Gambling";
+          await actor.update({ "system.vice": testVice });
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          const sheet = await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          assert.strictEqual(
+            actor.system.vice,
+            testVice,
+            `Vice should be "${testVice}"`
+          );
+
+          const root = sheet.element?.[0] || sheet.element;
+          const viceText = root?.textContent || "";
+          assert.ok(
+            viceText.includes(testVice),
+            `Sheet should display vice "${testVice}"`
+          );
+        });
+
+        t.test("can configure vice purveyor via flag", async function () {
+          this.timeout(8000);
+
+          const testPurveyor = "Baszo Baz";
+          await actor.setFlag(TARGET_MODULE_ID, "vice_purveyor", testPurveyor);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          const sheet = await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          const actualPurveyor = actor.getFlag(TARGET_MODULE_ID, "vice_purveyor");
+          assert.strictEqual(
+            actualPurveyor,
+            testPurveyor,
+            `Vice purveyor flag should be "${testPurveyor}"`
+          );
+
+          const root = sheet.element?.[0] || sheet.element;
+          const purveyorText = root?.textContent || "";
+          assert.ok(
+            purveyorText.includes(testPurveyor),
+            `Sheet should display vice purveyor "${testPurveyor}"`
+          );
+        });
+
+        t.test("can fully configure all character smart fields", async function () {
+          this.timeout(15000);
+
+          // Define test values
+          const config = {
+            heritage: "Skovlan",
+            background: "Military",
+            vice: "Obligation",
+            vicePurveyor: "Nyryx"
+          };
+
+          // Set all values
+          await actor.update({
+            "system.heritage": config.heritage,
+            "system.background": config.background,
+            "system.vice": config.vice,
+          });
+          await actor.setFlag(TARGET_MODULE_ID, "vice_purveyor", config.vicePurveyor);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Render sheet
+          const sheet = await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 400));
+
+          // Verify all values in actor data
+          assert.strictEqual(
+            actor.system.heritage,
+            config.heritage,
+            "Heritage should match config"
+          );
+          assert.strictEqual(
+            actor.system.background,
+            config.background,
+            "Background should match config"
+          );
+          assert.strictEqual(
+            actor.system.vice,
+            config.vice,
+            "Vice should match config"
+          );
+          assert.strictEqual(
+            actor.getFlag(TARGET_MODULE_ID, "vice_purveyor"),
+            config.vicePurveyor,
+            "Vice purveyor flag should match config"
+          );
+
+          // Verify all values display in sheet
+          const root = sheet.element?.[0] || sheet.element;
+          const sheetText = root?.textContent || "";
+
+          assert.ok(
+            sheetText.includes(config.heritage),
+            `Sheet should display heritage "${config.heritage}"`
+          );
+          assert.ok(
+            sheetText.includes(config.background),
+            `Sheet should display background "${config.background}"`
+          );
+          assert.ok(
+            sheetText.includes(config.vice),
+            `Sheet should display vice "${config.vice}"`
+          );
+          assert.ok(
+            sheetText.includes(config.vicePurveyor),
+            `Sheet should display vice purveyor "${config.vicePurveyor}"`
+          );
+
+          console.log("[Smart Fields] Full character configuration verified:", config);
+        });
+
+        t.test("smart fields display even when empty", async function () {
+          this.timeout(8000);
+
+          // Clear all fields
+          await actor.update({
+            "system.heritage": "",
+            "system.background": "",
+            "system.vice": "",
+          });
+          await actor.unsetFlag(TARGET_MODULE_ID, "vice_purveyor");
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Enable edit mode so smart-edit elements appear
+          await actor.setFlag(TARGET_MODULE_ID, "allow-edit", true);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // Render sheet
+          const sheet = await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          const root = sheet.element?.[0] || sheet.element;
+          assert.ok(root, "Sheet should render even with empty smart fields");
+
+          // Verify smart field elements exist (they show labels even when empty)
+          // In edit mode: smart-field-label with data-action="smart-edit"
+          // In locked mode: smart-field-value (no data-action)
+          const smartFieldElements = root.querySelectorAll('.smart-field-label, .smart-field-value');
+          assert.ok(
+            smartFieldElements.length >= 3,
+            `Should have at least 3 smart field elements (heritage, background, vice), found ${smartFieldElements.length}`
+          );
+        });
+
+        t.test("smart fields persist across sheet close/reopen", async function () {
+          this.timeout(12000);
+
+          // Configure fields
+          const config = {
+            heritage: "Iruvia",
+            background: "Underworld",
+            vice: "Pleasure"
+          };
+
+          await actor.update({
+            "system.heritage": config.heritage,
+            "system.background": config.background,
+            "system.vice": config.vice,
+          });
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Render sheet, verify, close
+          let sheet = await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          let root = sheet.element?.[0] || sheet.element;
+          let sheetText = root?.textContent || "";
+          assert.ok(
+            sheetText.includes(config.heritage),
+            "Heritage should display before close"
+          );
+
+          // Close sheet
+          await sheet.close();
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Reopen sheet
+          sheet = await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Verify values still display
+          root = sheet.element?.[0] || sheet.element;
+          sheetText = root?.textContent || "";
+
+          assert.ok(
+            sheetText.includes(config.heritage),
+            "Heritage should persist after reopen"
+          );
+          assert.ok(
+            sheetText.includes(config.background),
+            "Background should persist after reopen"
+          );
+          assert.ok(
+            sheetText.includes(config.vice),
+            "Vice should persist after reopen"
+          );
+        });
+
+        t.test("clearing smart field reverts to placeholder label", async function () {
+          this.timeout(12000);
+
+          // Set a heritage value first
+          const testHeritage = "Akoros";
+          await actor.update({ "system.heritage": testHeritage });
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Render sheet first
+          let sheet = await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          let root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode by clicking the toggle (this properly sets sheet.allow_edit)
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            // Re-get root after re-render
+            root = sheet.element?.[0] || sheet.element;
+          }
+
+          let heritageField = root.querySelector('[data-field="system.heritage"]');
+          assert.ok(heritageField, "Heritage field element should exist (requires edit mode)");
+          assert.ok(
+            heritageField.textContent.includes(testHeritage),
+            `Heritage field should display "${testHeritage}" before clearing`
+          );
+
+          // Clear the field (simulating Clear button which sets value to empty string)
+          await actor.update({ "system.heritage": "" });
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Re-render sheet
+          await sheet.render(true);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Get updated DOM
+          root = sheet.element?.[0] || sheet.element;
+          heritageField = root.querySelector('[data-field="system.heritage"]');
+          assert.ok(heritageField, "Heritage field element should still exist after clearing");
+
+          // The field should now display the label "Heritage" (localized) instead of the value
+          const heritageLabel = game.i18n.localize("BITD.Heritage");
+          assert.ok(
+            heritageField.textContent.includes(heritageLabel),
+            `Heritage field should display placeholder label "${heritageLabel}" after clearing, got "${heritageField.textContent.trim()}"`
+          );
+          assert.ok(
+            !heritageField.textContent.includes(testHeritage),
+            `Heritage field should NOT display old value "${testHeritage}" after clearing`
+          );
+
+          console.log(`[Smart Fields] Cleared heritage: "${testHeritage}" -> "${heritageField.textContent.trim()}"`);
+        });
+
+        t.test("clearing vice purveyor reverts to placeholder label", async function () {
+          this.timeout(12000);
+
+          // Set a vice purveyor value first
+          const testPurveyor = "Baszo Baz";
+          await actor.setFlag(TARGET_MODULE_ID, "vice_purveyor", testPurveyor);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Render sheet first
+          let sheet = await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          let root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode by clicking the toggle (this properly sets sheet.allow_edit)
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            // Re-get root after re-render
+            root = sheet.element?.[0] || sheet.element;
+          }
+
+          let purveyorField = root.querySelector('[data-field="flags.bitd-alternate-sheets.vice_purveyor"]');
+          assert.ok(purveyorField, "Vice purveyor field element should exist (requires edit mode)");
+          assert.ok(
+            purveyorField.textContent.includes(testPurveyor),
+            `Vice purveyor field should display "${testPurveyor}" before clearing`
+          );
+
+          // Clear the field by unsetting the flag
+          await actor.unsetFlag(TARGET_MODULE_ID, "vice_purveyor");
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Re-render sheet
+          await sheet.render(true);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Get updated DOM
+          root = sheet.element?.[0] || sheet.element;
+          purveyorField = root.querySelector('[data-field="flags.bitd-alternate-sheets.vice_purveyor"]');
+          assert.ok(purveyorField, "Vice purveyor field element should still exist after clearing");
+
+          // The field should now display the label instead of the value
+          const purveyorLabel = game.i18n.localize("bitd-alt.VicePurveyor");
+          assert.ok(
+            purveyorField.textContent.includes(purveyorLabel),
+            `Vice purveyor field should display placeholder label "${purveyorLabel}" after clearing, got "${purveyorField.textContent.trim()}"`
+          );
+          assert.ok(
+            !purveyorField.textContent.includes(testPurveyor),
+            `Vice purveyor field should NOT display old value "${testPurveyor}" after clearing`
+          );
+
+          console.log(`[Smart Fields] Cleared vice purveyor: "${testPurveyor}" -> "${purveyorField.textContent.trim()}"`);
+        });
+      });
     },
     { displayName: "BitD Alt Sheets: Smart Fields" }
   );

@@ -53,6 +53,7 @@
     "scripts/tests/error-handling.test.js",
     "scripts/tests/binary-checkboxes.test.js",
     "scripts/tests/migration.test.js",
-    "scripts/tests/settings.test.js"
+    "scripts/tests/settings.test.js",
+    "scripts/tests/crew-link.test.js"
   ]
 }

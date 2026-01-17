@@ -24,6 +24,7 @@
  * - bitd-alternate-sheets.binary-checkboxes: Binary item checkboxes and load pills
  * - bitd-alternate-sheets.migration: Data migration for ability progress, equipped items, legacy fields
  * - bitd-alternate-sheets.settings: Settings registration and cache invalidation
+ * - bitd-alternate-sheets.crew-link: Crew linking via character sheet, cancel/clear behavior, locked mode
  */
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -107,6 +108,7 @@ Hooks.once("ready", () => {
   console.log(`  quench.runBatches("bitd-alternate-sheets.binary-checkboxes")`);
   console.log(`  quench.runBatches("bitd-alternate-sheets.migration")`);
   console.log(`  quench.runBatches("bitd-alternate-sheets.settings")`);
+  console.log(`  quench.runBatches("bitd-alternate-sheets.crew-link")`);
   console.log(`  game.modules.get("${MODULE_ID}").api.runAllTests()`);
 });
 
