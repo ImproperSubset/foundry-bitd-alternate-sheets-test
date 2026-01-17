@@ -191,8 +191,10 @@ Hooks.on("quenchReady", (quench) => {
             // Cache stats not publicly available - use fallback instrumentation
             // Monkeypatch getIndex to verify cache is being used on second render
             let getIndexCalls = 0;
-            const originalGetIndex = CompendiumCollection.prototype.getIndex;
-            CompendiumCollection.prototype.getIndex = function (...args) {
+            // V13+ uses namespaced path, fall back to global for V12
+            const CompendiumCollectionClass = foundry.documents?.collections?.CompendiumCollection ?? CompendiumCollection;
+            const originalGetIndex = CompendiumCollectionClass.prototype.getIndex;
+            CompendiumCollectionClass.prototype.getIndex = function (...args) {
               getIndexCalls++;
               return originalGetIndex.apply(this, args);
             };
@@ -212,7 +214,7 @@ Hooks.on("quenchReady", (quench) => {
               const root = actor.sheet.element?.[0] || actor.sheet.element;
               assert.ok(root, "Sheet should re-render successfully with cache");
             } finally {
-              CompendiumCollection.prototype.getIndex = originalGetIndex;
+              CompendiumCollectionClass.prototype.getIndex = originalGetIndex;
             }
           } else {
             // Cache stats available - verify cache is populated
