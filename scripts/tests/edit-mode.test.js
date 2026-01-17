@@ -10,6 +10,7 @@ import {
   waitForActorCondition,
   isTargetModuleActive,
   closeAllDialogs,
+  TestNumberer,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -48,6 +49,8 @@ async function clearAllowEditStates() {
   await game.user?.unsetFlag(TARGET_MODULE_ID, "allowEditStates");
 }
 
+const t = new TestNumberer("14");
+
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
     console.warn(`[${MODULE_ID}] bitd-alternate-sheets not active, skipping edit mode tests`);
@@ -57,9 +60,9 @@ Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
     "bitd-alternate-sheets.edit-mode",
     (context) => {
-      const { describe, it, assert, beforeEach, afterEach } = context;
+      const { assert, beforeEach, afterEach } = context;
 
-      describe("Character Sheet Edit Mode", function () {
+      t.section("Character Sheet Edit Mode", () => {
         let actor;
 
         beforeEach(async function () {
@@ -90,13 +93,13 @@ Hooks.on("quenchReady", (quench) => {
           await clearAllowEditStates();
         });
 
-        it("sheet defaults to locked (allow_edit = false)", async function () {
+        t.test("sheet defaults to locked (allow_edit = false)", async function () {
           const sheet = await ensureSheet(actor);
           assert.equal(sheet.allow_edit, false, "Sheet should default to locked");
           assert.ok(!isSheetUnlocked(sheet), "Sheet DOM should not have allow-edit class");
         });
 
-        it("clicking edit toggle unlocks the sheet", async function () {
+        t.test("clicking edit toggle unlocks the sheet", async function () {
           this.timeout(5000);
           const sheet = await ensureSheet(actor);
           assert.ok(!isSheetUnlocked(sheet), "Sheet should start locked");
@@ -107,7 +110,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(isSheetUnlocked(sheet), "Sheet DOM should have allow-edit class");
         });
 
-        it("clicking edit toggle again locks the sheet", async function () {
+        t.test("clicking edit toggle again locks the sheet", async function () {
           this.timeout(5000);
           const sheet = await ensureSheet(actor);
 
@@ -119,7 +122,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(!isSheetUnlocked(sheet), "Sheet DOM should not have allow-edit class");
         });
 
-        it("edit state persists across sheet close/reopen", async function () {
+        t.test("edit state persists across sheet close/reopen", async function () {
           this.timeout(5000);
           let sheet = await ensureSheet(actor);
 
@@ -158,7 +161,7 @@ Hooks.on("quenchReady", (quench) => {
           console.log(`[EditMode Test] Edit state persisted via user flag for actor ${actor.id}`);
         });
 
-        it("locked sheet hides delete buttons", async function () {
+        t.test("locked sheet hides delete buttons", async function () {
           const sheet = await ensureSheet(actor);
           assert.ok(!isSheetUnlocked(sheet), "Sheet should be locked");
 
@@ -171,7 +174,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("unlocked sheet shows edit controls", async function () {
+        t.test("unlocked sheet shows edit controls", async function () {
           this.timeout(5000);
           const sheet = await ensureSheet(actor);
           await clickEditToggle(sheet);
@@ -184,7 +187,7 @@ Hooks.on("quenchReady", (quench) => {
         });
       });
 
-      describe("Crew Sheet Edit Mode", function () {
+      t.section("Crew Sheet Edit Mode", () => {
         let actor;
 
         beforeEach(async function () {
@@ -214,13 +217,13 @@ Hooks.on("quenchReady", (quench) => {
           await clearAllowEditStates();
         });
 
-        it("crew sheet defaults to locked", async function () {
+        t.test("crew sheet defaults to locked", async function () {
           const sheet = await ensureSheet(actor);
           assert.equal(sheet.allow_edit, false, "Crew sheet should default to locked");
           assert.ok(!isSheetUnlocked(sheet), "Crew sheet DOM should not have allow-edit class");
         });
 
-        it("clicking edit toggle unlocks the crew sheet", async function () {
+        t.test("clicking edit toggle unlocks the crew sheet", async function () {
           this.timeout(5000);
           const sheet = await ensureSheet(actor);
           assert.ok(!isSheetUnlocked(sheet), "Crew sheet should start locked");
@@ -231,7 +234,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(isSheetUnlocked(sheet), "Crew sheet DOM should have allow-edit class");
         });
 
-        it("crew sheet edit state persists across close/reopen", async function () {
+        t.test("crew sheet edit state persists across close/reopen", async function () {
           this.timeout(5000);
           let sheet = await ensureSheet(actor);
 

@@ -10,6 +10,7 @@ import {
   waitForActorUpdate,
   isTargetModuleActive,
   closeAllDialogs,
+  TestNumberer,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -133,12 +134,14 @@ Hooks.on("quenchReady", (quench) => {
     return;
   }
 
+  const t = new TestNumberer("2");
+
   quench.registerBatch(
     "bitd-alternate-sheets.smart-fields",
     (context) => {
-      const { describe, it, assert, beforeEach, afterEach } = context;
+      const { assert, beforeEach, afterEach } = context;
 
-      describe("2.1 Smart Item Selectors (Crew Sheet)", function () {
+      t.section("Smart Item Selectors (Crew Sheet)", () => {
         let actor;
 
         beforeEach(async function () {
@@ -168,7 +171,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("2.1.0 crew_reputation selector element exists", async function () {
+        t.test("crew_reputation selector element exists", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
 
@@ -183,7 +186,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(selector, "crew_reputation selector element should exist");
         });
 
-        it("2.1.1 click crew_reputation field opens selector dialog", async function () {
+        t.test("click crew_reputation field opens selector dialog", async function () {
           this.timeout(8000);
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
@@ -217,7 +220,7 @@ Hooks.on("quenchReady", (quench) => {
           await dialog.close();
         });
 
-        it("2.1.2 select reputation assigns crew_reputation item", async function () {
+        t.test("select reputation assigns crew_reputation item", async function () {
           this.timeout(10000);
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
@@ -295,7 +298,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(newRep, "crew_reputation item should be created after selection");
         });
 
-        it("2.1.3 hunting_grounds selector opens dialog", async function () {
+        t.test("hunting_grounds selector opens dialog", async function () {
           this.timeout(8000);
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
@@ -325,7 +328,7 @@ Hooks.on("quenchReady", (quench) => {
           await dialog.close();
         });
 
-        it("2.1.3 select hunting_grounds assigns item", async function () {
+        t.test("select hunting_grounds assigns item", async function () {
           this.timeout(10000);
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
@@ -400,7 +403,7 @@ Hooks.on("quenchReady", (quench) => {
         });
       });
 
-      describe("2.1 Smart Edit Fields (Character Sheet)", function () {
+      t.section("Smart Edit Fields (Character Sheet)", () => {
         let actor;
 
         beforeEach(async function () {
@@ -430,7 +433,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("2.1.4 heritage smart-edit field exists", async function () {
+        t.test("heritage smart-edit field exists", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
 
@@ -445,7 +448,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(field, "Heritage smart-edit field should exist");
         });
 
-        it("2.1.4 click heritage opens selector or text dialog", async function () {
+        t.test("click heritage opens selector or text dialog", async function () {
           this.timeout(8000);
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
@@ -482,7 +485,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("2.1.4 fallback to text input when no chooser items", async function () {
+        t.test("fallback to text input when no chooser items", async function () {
           this.timeout(8000);
           // This test verifies that text dialog opens when no compendium items
           // Since we can't easily clear compendia, we test that some dialog opens
@@ -526,7 +529,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("2.1.5 heritage selection persists to actor.system", async function () {
+        t.test("heritage selection persists to actor.system", async function () {
           this.timeout(10000);
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
@@ -628,7 +631,238 @@ Hooks.on("quenchReady", (quench) => {
         });
       });
 
-      describe("2.2 Compendium Description Tooltips", function () {
+      t.section("Smart Field Text Fallback", () => {
+        let actor;
+        let originalFromCompendia;
+        let originalFromWorld;
+
+        beforeEach(async function () {
+          this.timeout(10000);
+
+          // Save original settings
+          originalFromCompendia = game.settings.get(TARGET_MODULE_ID, "populateFromCompendia");
+          originalFromWorld = game.settings.get(TARGET_MODULE_ID, "populateFromWorld");
+
+          // Disable both sources to force text fallback
+          await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", false);
+          await game.settings.set(TARGET_MODULE_ID, "populateFromWorld", false);
+
+          // Wait for cache invalidation
+          await new Promise((r) => setTimeout(r, 300));
+
+          const result = await createTestActor({
+            name: "SmartFields-TextFallback-Test",
+            playbookName: "Cutter"
+          });
+          actor = result.actor;
+          await closeAllDialogs();
+        });
+
+        afterEach(async function () {
+          this.timeout(5000);
+
+          // Restore original settings first
+          if (originalFromCompendia !== undefined) {
+            await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", originalFromCompendia);
+          }
+          if (originalFromWorld !== undefined) {
+            await game.settings.set(TARGET_MODULE_ID, "populateFromWorld", originalFromWorld);
+          }
+
+          await closeAllDialogs();
+          if (actor) {
+            try {
+              if (actor.sheet) {
+                await actor.sheet.close();
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
+            } catch {
+              // Ignore close errors
+            }
+            await actor.delete();
+            actor = null;
+          }
+        });
+
+        t.test("heritage field opens text dialog when no options available", async function () {
+          this.timeout(8000);
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          const field = findSmartEditField(root, "system.heritage");
+          assert.ok(field, "Heritage smart-edit field should exist");
+
+          // Click the field
+          field.click();
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // With both sources disabled, should get text input dialog, not card selection
+          // Check for V2 text input dialog first
+          const v2Dialog = document.querySelector("dialog[open]");
+          const v2TextInput = v2Dialog?.querySelector('input[type="text"], input[name="value"]');
+
+          // Check for V1 text input dialog
+          const v1Dialogs = Object.values(ui.windows).filter(
+            (w) => w instanceof Dialog && w.rendered
+          );
+          const v1Dialog = v1Dialogs.length > 0 ? v1Dialogs[v1Dialogs.length - 1] : null;
+          const v1DialogEl = v1Dialog?.element?.[0] || v1Dialog?.element;
+          const v1TextInput = v1DialogEl?.querySelector('input[type="text"], input[name="value"]');
+
+          const textInput = v2TextInput || v1TextInput;
+          assert.ok(
+            textInput,
+            "Text input dialog should open when no compendium/world options available"
+          );
+
+          // Clean up
+          if (v2Dialog) {
+            const cancelBtn = v2Dialog.querySelector('button[data-action="cancel"]');
+            if (cancelBtn) cancelBtn.click();
+            else v2Dialog.close();
+          } else if (v1Dialog) {
+            await v1Dialog.close();
+          }
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        });
+
+        t.test("text input value persists to actor.system.heritage", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Clear existing heritage
+          if (actor.system?.heritage) {
+            await actor.update({ "system.heritage": "" });
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          const field = findSmartEditField(root, "system.heritage");
+          assert.ok(field, "Heritage smart-edit field should exist");
+
+          // Click the field
+          field.click();
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Find text input in either V2 or V1 dialog
+          const v2Dialog = document.querySelector("dialog[open]");
+          const v2TextInput = v2Dialog?.querySelector('input[type="text"], input[name="value"]');
+
+          const v1Dialogs = Object.values(ui.windows).filter(
+            (w) => w instanceof Dialog && w.rendered
+          );
+          const v1Dialog = v1Dialogs.length > 0 ? v1Dialogs[v1Dialogs.length - 1] : null;
+          const v1DialogEl = v1Dialog?.element?.[0] || v1Dialog?.element;
+          const v1TextInput = v1DialogEl?.querySelector('input[type="text"], input[name="value"]');
+
+          const textInput = v2TextInput || v1TextInput;
+          const dialogEl = v2Dialog || v1DialogEl;
+
+          if (!textInput) {
+            // May get card dialog if there are still items somehow - skip gracefully
+            if (v2Dialog) {
+              const cancelBtn = v2Dialog.querySelector('button[data-action="cancel"]');
+              if (cancelBtn) cancelBtn.click();
+              else v2Dialog.close();
+            } else if (v1Dialog) {
+              await v1Dialog.close();
+            }
+            this.skip();
+            return;
+          }
+
+          // Enter custom heritage value
+          const customValue = "Custom Test Heritage";
+          textInput.value = customValue;
+          textInput.dispatchEvent(new Event("input", { bubbles: true }));
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // Click OK/submit button
+          const okButton = dialogEl.querySelector(
+            'button[data-action="ok"], button[data-button="confirm"], button[type="submit"]'
+          );
+          assert.ok(okButton, "OK button should exist in text dialog");
+
+          okButton.click();
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // CRITICAL: Verify actor.system.heritage was updated to exact value
+          const newHeritage = actor.system?.heritage;
+          assert.strictEqual(
+            newHeritage,
+            customValue,
+            `actor.system.heritage should be "${customValue}" (got: "${newHeritage}")`
+          );
+        });
+
+        t.test("background field also uses text fallback", async function () {
+          this.timeout(8000);
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          const field = findSmartEditField(root, "system.background");
+          if (!field) {
+            // Background field might not exist on all sheets
+            this.skip();
+            return;
+          }
+
+          // Click the field
+          field.click();
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Should get text input dialog
+          const v2Dialog = document.querySelector("dialog[open]");
+          const v2TextInput = v2Dialog?.querySelector('input[type="text"], input[name="value"]');
+
+          const v1Dialogs = Object.values(ui.windows).filter(
+            (w) => w instanceof Dialog && w.rendered
+          );
+          const v1Dialog = v1Dialogs.length > 0 ? v1Dialogs[v1Dialogs.length - 1] : null;
+          const v1DialogEl = v1Dialog?.element?.[0] || v1Dialog?.element;
+          const v1TextInput = v1DialogEl?.querySelector('input[type="text"], input[name="value"]');
+
+          const textInput = v2TextInput || v1TextInput;
+          assert.ok(
+            textInput,
+            "Background field should also open text dialog when no options available"
+          );
+
+          // Clean up
+          if (v2Dialog) {
+            const cancelBtn = v2Dialog.querySelector('button[data-action="cancel"]');
+            if (cancelBtn) cancelBtn.click();
+            else v2Dialog.close();
+          } else if (v1Dialog) {
+            await v1Dialog.close();
+          }
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        });
+      });
+
+      t.section("Compendium Description Tooltips", () => {
         let actor;
 
         beforeEach(async function () {
@@ -656,7 +890,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("2.2.1 smart field has data-tooltip attribute", async function () {
+        t.test("smart field has data-tooltip attribute", async function () {
           const sheet = await ensureSheet(actor);
           await new Promise((resolve) => setTimeout(resolve, 200));
           const root = sheet.element?.[0] || sheet.element;
@@ -690,7 +924,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("2.2.2 tooltip contains text when item exists", async function () {
+        t.test("tooltip contains text when item exists", async function () {
           this.timeout(8000);
 
           // First add a crew_reputation item to the actor
@@ -749,7 +983,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("2.2.3 tooltip fallback when no item selected", async function () {
+        t.test("tooltip fallback when no item selected", async function () {
           const sheet = await ensureSheet(actor);
           await new Promise((resolve) => setTimeout(resolve, 200));
           const root = sheet.element?.[0] || sheet.element;

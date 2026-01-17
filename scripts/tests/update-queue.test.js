@@ -11,6 +11,8 @@ import {
   isTargetModuleActive,
   cleanupTestActor,
   testCleanup,
+  expectedTestError,
+  TestNumberer,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -56,6 +58,8 @@ function trackNotifications() {
   };
 }
 
+const t = new TestNumberer("5");
+
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
     console.warn(`[${MODULE_ID}] bitd-alternate-sheets not active, skipping update queue tests`);
@@ -65,9 +69,9 @@ Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
     "bitd-alternate-sheets.update-queue",
     (context) => {
-      const { describe, it, assert, beforeEach, afterEach } = context;
+      const { assert, beforeEach, afterEach } = context;
 
-      describe("5.1 Sequential Update Batching", function () {
+      t.section("Sequential Update Batching", () => {
         let actor;
 
         beforeEach(async function () {
@@ -85,7 +89,7 @@ Hooks.on("quenchReady", (quench) => {
           actor = null;
         });
 
-        it("5.1.1 rapid updates process sequentially", async function () {
+        t.test("rapid updates process sequentially", async function () {
           this.timeout(10000);
 
           const sheet = await ensureSheet(actor);
@@ -137,17 +141,28 @@ Hooks.on("quenchReady", (quench) => {
             "Final exp value should be defined after rapid updates"
           );
 
-          // CRITICAL: Value should have changed from initial (proving updates processed)
-          assert.notStrictEqual(
-            finalExp,
-            initialExp,
-            `Exp value should change after rapid clicks (was ${initialExp}, now ${finalExp})`
+          // CRITICAL: After clicking teeth 1-3 rapidly, the final value should be 3
+          // (assuming initial was 0 and teeth toggle on/off behavior)
+          // The exact value depends on whether teeth toggle or increment
+          // At minimum, value should change from initial
+          assert.ok(
+            finalExp !== initialExp && finalExp > 0,
+            `Exp value should change to positive after rapid clicks (was ${initialExp}, now ${finalExp})`
           );
+
+          // If initial was 0 and we clicked 3 teeth, expect value to be 3
+          if (initialExp === 0) {
+            assert.strictEqual(
+              finalExp,
+              3,
+              `After clicking teeth 1-3, exp should be 3 (got ${finalExp})`
+            );
+          }
 
           console.log(`[UpdateQueue Test] Rapid updates: exp ${initialExp} → ${finalExp}`);
         });
 
-        it("5.1.1 multiple checkboxes don't cause race conditions", async function () {
+        t.test("multiple checkboxes don't cause race conditions", async function () {
           this.timeout(10000);
 
           const result = await createTestCrewActor({
@@ -222,9 +237,58 @@ Hooks.on("quenchReady", (quench) => {
             await cleanupTestActor(crewActor);
           }
         });
+
+        t.test("queueUpdate executes in submission order (FIFO)", async function () {
+          this.timeout(8000);
+
+          // Import the queueUpdate function
+          const module = await import(
+            "/modules/bitd-alternate-sheets/scripts/lib/update-queue.js"
+          );
+
+          const order = [];
+
+          // Queue multiple updates and track their execution order
+          const promises = [
+            module.queueUpdate(async () => {
+              order.push(1);
+              await new Promise((r) => setTimeout(r, 50));
+              return 1;
+            }),
+            module.queueUpdate(async () => {
+              order.push(2);
+              await new Promise((r) => setTimeout(r, 30));
+              return 2;
+            }),
+            module.queueUpdate(async () => {
+              order.push(3);
+              await new Promise((r) => setTimeout(r, 10));
+              return 3;
+            }),
+          ];
+
+          // Wait for all to complete
+          const results = await Promise.all(promises);
+
+          // Verify execution order matches submission order (FIFO)
+          assert.deepStrictEqual(
+            order,
+            [1, 2, 3],
+            "Queue should execute updates in submission order (FIFO)"
+          );
+
+          // Verify all results returned correctly
+          assert.deepStrictEqual(
+            results,
+            [1, 2, 3],
+            "Queue should return results in submission order"
+          );
+
+          console.log(`[UpdateQueue Test] Execution order: ${order.join(" → ")}`);
+        });
       });
 
-      describe("5.2 Error Handling", function () {
+      t.section("Error Handling", () => {
         let actor;
         let errorTracker;
         let notificationTracker;
@@ -249,7 +313,7 @@ Hooks.on("quenchReady", (quench) => {
           actor = null;
         });
 
-        it("5.2.0 queueUpdate function is available", async function () {
+        t.test("queueUpdate function is available", async function () {
           // Import the queueUpdate function
           const module = await import(
             "/modules/bitd-alternate-sheets/scripts/lib/update-queue.js"
@@ -260,7 +324,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("5.2.1 successful updates complete without error", async function () {
+        t.test("successful updates complete without error", async function () {
           this.timeout(8000);
 
           const initialErrors = errorTracker.errors.length;
@@ -306,7 +370,7 @@ Hooks.on("quenchReady", (quench) => {
             "Successful updates should not trigger error hooks"
           );
 
-          // CRITICAL: Verify actor.system was actually updated
+          // CRITICAL: Verify actor.system was actually updated to expected value
           const finalExp = actor.system?.attributes?.insight?.exp;
           assert.notStrictEqual(
             finalExp,
@@ -314,10 +378,19 @@ Hooks.on("quenchReady", (quench) => {
             `Actor data should change after successful update (was ${initialExp}, now ${finalExp})`
           );
 
+          // If initial was 0 and we clicked tooth 1, expect value to be 1
+          if (initialExp === 0) {
+            assert.strictEqual(
+              finalExp,
+              1,
+              `After clicking tooth 1, exp should be 1 (got ${finalExp})`
+            );
+          }
+
           console.log(`[UpdateQueue Test] Successful update: exp ${initialExp} → ${finalExp}`);
         });
 
-        it("5.2.2 queueUpdate returns promise that resolves", async function () {
+        t.test("queueUpdate returns promise that resolves", async function () {
           this.timeout(5000);
 
           // Import and test queueUpdate directly
@@ -332,7 +405,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.equal(result, "test-success", "queueUpdate should return function result");
         });
 
-        it("5.2.2 queueUpdate handles errors gracefully", async function () {
+        t.test("queueUpdate handles errors gracefully", async function () {
           this.timeout(5000);
 
           const module = await import(
@@ -345,12 +418,12 @@ Hooks.on("quenchReady", (quench) => {
           let errorCaught = false;
           try {
             await module.queueUpdate(async () => {
-              throw new Error("Test error for queue");
+              throw new Error(expectedTestError("queue error handling test"));
             });
           } catch (err) {
             errorCaught = true;
             assert.ok(
-              err.message.includes("Test error"),
+              err.message.includes("EXPECTED TEST ERROR"),
               "Error should be propagated"
             );
           }

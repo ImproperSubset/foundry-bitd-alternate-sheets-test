@@ -6,6 +6,178 @@
 const TARGET_MODULE_ID = "bitd-alternate-sheets";
 
 // ============================================================================
+// Auto-Numbering Test Helper
+// ============================================================================
+
+/**
+ * Auto-numbering helper for test suites.
+ * Generates unique test/section IDs based on hierarchy using a unified counter.
+ * Tests and sections share the same counter at each level, ensuring no duplicates.
+ *
+ * @example
+ * const t = new TestNumberer("1");
+ *
+ * t.section("Crew sheet basics", () => {      // "1.1 Crew sheet basics"
+ *   t.test("creates crew actor", fn);          // "1.1.1 creates crew actor"
+ *   t.test("crew has expected type", fn);      // "1.1.2 crew has expected type"
+ * });
+ *
+ * t.section("Playbook assignment", () => {    // "1.2 Playbook assignment"
+ *   t.test("can assign playbook", fn);         // "1.2.1 can assign playbook"
+ *   t.test("playbook updates sheet", fn);      // "1.2.2 playbook updates sheet"
+ *
+ *   t.section("Advanced playbook", () => {    // "1.2.3 Advanced playbook" (unified counter!)
+ *     t.test("nested test", fn);               // "1.2.3.1 nested test"
+ *   });
+ *
+ *   t.test("continues after nested", fn);      // "1.2.4 continues after nested"
+ * });
+ *
+ * // Note: t.test() outside t.section() throws an error to prevent collisions
+ */
+export class TestNumberer {
+  /**
+   * Create a new TestNumberer for a batch.
+   * @param {string} batchId - The batch identifier (e.g., "1", "11")
+   */
+  constructor(batchId) {
+    this.batchId = batchId;
+    this.numberStack = [];        // Stack of assigned numbers for current path
+    this._counterAtDepth = [0];   // Unified counter at each depth (tests + sections share)
+  }
+
+  /**
+   * Get the next number at the current depth and increment the counter.
+   * @returns {number} The next available number
+   * @private
+   */
+  _getNextNumber() {
+    const depth = this.numberStack.length;
+
+    // Ensure counter exists for this depth
+    while (this._counterAtDepth.length <= depth) {
+      this._counterAtDepth.push(0);
+    }
+
+    // Increment and return
+    this._counterAtDepth[depth]++;
+    return this._counterAtDepth[depth];
+  }
+
+  /**
+   * Wrap a describe block with auto-numbered section.
+   * @param {string} name - Section name (without number prefix)
+   * @param {Function} fn - Test suite callback function
+   */
+  section(name, fn) {
+    // Get next number at current depth (shared with tests)
+    const num = this._getNextNumber();
+
+    // Push to stack
+    this.numberStack.push(num);
+
+    // Build full number string
+    const numberStr = this.numberStack.join(".");
+    const fullNumber = `${this.batchId}.${numberStr}`;
+
+    // Reset counter for the next depth level (inside this section)
+    const depth = this.numberStack.length;
+    if (this._counterAtDepth.length > depth) {
+      this._counterAtDepth[depth] = 0;
+    }
+
+    describe(`${fullNumber} ${name}`, () => {
+      fn();
+    });
+
+    // Pop from stack when section completes
+    this.numberStack.pop();
+  }
+
+  /**
+   * Wrap an it block with auto-numbered test.
+   * Must be called inside a section() block.
+   * @param {string} name - Test name (without number prefix)
+   * @param {Function} fn - Test function (can be async)
+   * @throws {Error} If called outside of a section
+   */
+  test(name, fn) {
+    if (this.numberStack.length === 0) {
+      throw new Error(
+        `TestNumberer: t.test("${name}") must be called inside t.section(). ` +
+        "Root-level tests would collide with section numbers."
+      );
+    }
+
+    // Get next number at current depth (shared with sections)
+    const num = this._getNextNumber();
+    const numberStr = this.numberStack.join(".");
+    const fullNumber = `${this.batchId}.${numberStr}.${num}`;
+
+    it(`${fullNumber} ${name}`, fn);
+  }
+
+  /**
+   * Wrap an it.skip block with auto-numbered skipped test.
+   * Must be called inside a section() block.
+   * @param {string} name - Test name (without number prefix)
+   * @param {Function} fn - Test function (can be async)
+   */
+  skip(name, fn) {
+    if (this.numberStack.length === 0) {
+      throw new Error(
+        `TestNumberer: t.skip("${name}") must be called inside t.section().`
+      );
+    }
+
+    // Get next number at current depth (shared with sections)
+    const num = this._getNextNumber();
+    const numberStr = this.numberStack.join(".");
+    const fullNumber = `${this.batchId}.${numberStr}.${num}`;
+
+    it.skip(`${fullNumber} ${name}`, fn);
+  }
+
+  /**
+   * Get the current section number string (for debugging/logging).
+   * @returns {string} Current section number (e.g., "1.2.3")
+   */
+  getCurrentSection() {
+    const numberStr = this.numberStack.join(".");
+    return numberStr ? `${this.batchId}.${numberStr}` : this.batchId;
+  }
+
+  /**
+   * Get what the next number would be at current depth (for debugging/logging).
+   * @returns {string} Next number (e.g., "1.2.4")
+   */
+  peekNextNumber() {
+    const depth = this.numberStack.length;
+    const nextNum = (this._counterAtDepth[depth] || 0) + 1;
+    const numberStr = this.numberStack.join(".");
+    return numberStr
+      ? `${this.batchId}.${numberStr}.${nextNum}`
+      : `${this.batchId}.${nextNum}`;
+  }
+}
+
+/**
+ * Prefix for expected test errors. Use this when throwing errors that are
+ * intentionally generated as part of a test, so they don't appear alarming in console.
+ * @example throw new Error(expectedTestError("update failure"));
+ */
+export const EXPECTED_TEST_ERROR_PREFIX = "[EXPECTED TEST ERROR]";
+
+/**
+ * Create an error message with the expected test error prefix.
+ * @param {string} message - The error message
+ * @returns {string} Prefixed error message
+ */
+export function expectedTestError(message) {
+  return `${EXPECTED_TEST_ERROR_PREFIX} ${message}`;
+}
+
+// ============================================================================
 // V13+ Compatibility Helpers
 // ============================================================================
 
@@ -251,6 +423,70 @@ export async function waitForClockElement(container, { timeoutMs = 5000 } = {}) 
   }
 
   console.log(`[Test Utils] Clock element not found after ${timeoutMs}ms timeout`);
+  return null;
+}
+
+/**
+ * Find a clock element within a chat message.
+ * @param {ChatMessage} message - The chat message to search in
+ * @returns {HTMLElement|null} - The clock element or null if not found
+ */
+export function findClockInChat(message) {
+  // Try multiple selectors for chat log - Foundry VTT versions vary
+  const chatLog = document.getElementById("chat-log") ||
+                  document.querySelector("#chat-log") ||
+                  document.querySelector(".chat-log") ||
+                  document.querySelector("#chat .message-list");
+
+  if (!chatLog) {
+    console.log("[Test Utils] Chat log element not found");
+    return null;
+  }
+
+  // Try multiple selectors for message element
+  const messageEl = chatLog.querySelector(`[data-message-id="${message.id}"]`) ||
+                    chatLog.querySelector(`li.message[data-message-id="${message.id}"]`) ||
+                    chatLog.querySelector(`article[data-message-id="${message.id}"]`);
+
+  if (!messageEl) {
+    console.log(`[Test Utils] Message element not found for id: ${message.id}`);
+    return null;
+  }
+
+  // Try multiple clock selectors - the module may use different class names
+  const clockEl = messageEl.querySelector(".blades-clock, .linkedClock, .clock, .clock-container, [data-clock-uuid]");
+
+  if (!clockEl) {
+    console.log(`[Test Utils] Clock element not found in message ${message.id}`);
+    return null;
+  }
+
+  return clockEl;
+}
+
+/**
+ * Wait for a clock element to appear in a chat message.
+ * Uses exponential backoff for reliability.
+ * @param {ChatMessage} message - The chat message to search in
+ * @param {number} maxWaitMs - Maximum wait time in milliseconds (default 5000)
+ * @returns {Promise<HTMLElement|null>} - The clock element or null if not found
+ */
+export async function waitForClockInChat(message, maxWaitMs = 5000) {
+  let waited = 0;
+  let interval = 100; // Start with 100ms, will increase exponentially
+  const startTime = Date.now();
+
+  while (waited < maxWaitMs) {
+    const clockEl = findClockInChat(message);
+    if (clockEl) {
+      console.log(`[Test Utils] Clock found in chat after ${Date.now() - startTime}ms`);
+      return clockEl;
+    }
+    await new Promise(resolve => setTimeout(resolve, interval));
+    waited += interval;
+    interval = Math.min(interval * 1.5, 500); // Exponential backoff, cap at 500ms
+  }
+  console.log(`[Test Utils] Clock not found in chat after ${maxWaitMs}ms timeout`);
   return null;
 }
 

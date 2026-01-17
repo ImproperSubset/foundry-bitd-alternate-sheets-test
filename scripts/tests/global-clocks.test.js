@@ -11,6 +11,9 @@ import {
   closeAllDialogs,
   getJournalSheetElement,
   waitForClockElement,
+  findClockInChat,
+  waitForClockInChat,
+  TestNumberer,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -60,71 +63,6 @@ async function createClockChatMessage(clockActor) {
   // Wait for rendering
   await new Promise((resolve) => setTimeout(resolve, 200));
   return message;
-}
-
-/**
- * Find the clock element in the chat log for a message.
- * @param {ChatMessage} message
- * @returns {HTMLElement|null}
- */
-function findClockInChat(message) {
-  // Try multiple selectors for chat log - Foundry VTT versions vary
-  const chatLog = document.getElementById("chat-log") ||
-                  document.querySelector("#chat-log") ||
-                  document.querySelector(".chat-log") ||
-                  document.querySelector("#chat .message-list");
-
-  if (!chatLog) {
-    console.log("[GlobalClocks Test] Chat log element not found");
-    return null;
-  }
-
-  // Try multiple selectors for message element
-  const messageEl = chatLog.querySelector(`[data-message-id="${message.id}"]`) ||
-                    chatLog.querySelector(`li.message[data-message-id="${message.id}"]`) ||
-                    chatLog.querySelector(`article[data-message-id="${message.id}"]`);
-
-  if (!messageEl) {
-    console.log(`[GlobalClocks Test] Message element not found for id: ${message.id}`);
-    return null;
-  }
-
-  // Try multiple clock selectors - the module may use different class names
-  const clockEl = messageEl.querySelector(".blades-clock, .linkedClock, .clock, .clock-container, [data-clock-uuid]");
-
-  if (!clockEl) {
-    // Debug: log what we found in the message
-    const contentEl = messageEl.querySelector(".message-content");
-    console.log(`[GlobalClocks Test] Clock element not found. Message content: ${contentEl?.innerHTML?.substring(0, 200)}`);
-  }
-
-  return clockEl;
-}
-
-/**
- * Wait for clock enrichment to complete and return the clock element.
- * Uses exponential backoff for reliability on slower systems (Codex recommendation).
- * @param {ChatMessage} message
- * @param {number} maxWaitMs - Maximum time to wait (default 5000ms)
- * @returns {Promise<HTMLElement|null>}
- */
-async function waitForClockInChat(message, maxWaitMs = 5000) {
-  let waited = 0;
-  let interval = 100; // Start with 100ms, will increase exponentially
-  const startTime = Date.now();
-
-  while (waited < maxWaitMs) {
-    const clockEl = findClockInChat(message);
-    if (clockEl) {
-      console.log(`[GlobalClocks Test] Clock found after ${Date.now() - startTime}ms`);
-      return clockEl;
-    }
-    await new Promise(resolve => setTimeout(resolve, interval));
-    waited += interval;
-    interval = Math.min(interval * 1.5, 500); // Exponential backoff, cap at 500ms
-  }
-  console.log(`[GlobalClocks Test] Clock not found after ${maxWaitMs}ms timeout`);
-  return null;
 }
 
 /**
@@ -198,6 +136,8 @@ function findHealingClockInHarmBox(root) {
   return root.querySelector(".harm-box .healing-clock .blades-clock");
 }
 
+const t = new TestNumberer("4");
+
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
     console.warn(`[${MODULE_ID}] bitd-alternate-sheets not active, skipping global clocks tests`);
@@ -207,9 +147,9 @@ Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
     "bitd-alternate-sheets.global-clocks",
     (context) => {
-      const { describe, it, assert, beforeEach, afterEach } = context;
+      const { assert, beforeEach, afterEach } = context;
 
-      describe("4.1 Clocks in Chat Messages", function () {
+      t.section("Clocks in Chat Messages", () => {
         let clockActor;
         let chatMessage;
 
@@ -235,7 +175,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("4.1.0 can create clock actor", async function () {
+        t.test("can create clock actor", async function () {
           this.timeout(5000);
           clockActor = await createClockActor({ name: "Test Clock 4.1.0" });
 
@@ -253,7 +193,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("4.1.1 @UUID clock link renders as interactive clock", async function () {
+        t.test("@UUID clock link renders as interactive clock", async function () {
           this.timeout(8000);
           clockActor = await createClockActor({ name: "Test Clock 4.1.1", type: 4, value: 2 });
 
@@ -264,12 +204,7 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           chatMessage = await createClockChatMessage(clockActor);
-
-          if (!chatMessage) {
-            // Message creation failed
-            this.skip();
-            return;
-          }
+          assert.ok(chatMessage, "Chat message creation should succeed");
 
           // Wait for enrichment
           await new Promise((resolve) => setTimeout(resolve, 500));
@@ -290,7 +225,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("4.1.2 clock snapshot preserves historical value", async function () {
+        t.test("clock snapshot preserves historical value", async function () {
           this.timeout(15000);
 
           // Create clock at value 2
@@ -304,15 +239,11 @@ Hooks.on("quenchReady", (quench) => {
 
           // Create message with current value
           chatMessage = await createClockChatMessage(clockActor);
+          assert.ok(chatMessage, "Chat message creation should succeed");
 
           // Wait for clock enrichment with retry
           const clockEl = await waitForClockInChat(chatMessage, 3000);
-          if (!clockEl) {
-            // Clock enrichment not available after waiting
-            console.log("[GlobalClocks Test] Clock enrichment not available for snapshot test after retry");
-            this.skip();
-            return;
-          }
+          assert.ok(clockEl, "Clock should render in chat after enrichment");
 
           // Change the clock value AFTER we found the clock element
           await clockActor.update({
@@ -325,11 +256,7 @@ Hooks.on("quenchReady", (quench) => {
           // This is because the message content has |snapshot:2 encoded
           const visualValue = getClockVisualValue(clockEl);
           // Snapshot behavior: message should show value at creation time (2), not current (3)
-          if (visualValue === null) {
-            console.log("[GlobalClocks Test] Cannot determine clock visual value");
-            this.skip();
-            return;
-          }
+          assert.ok(visualValue !== null, "Should be able to determine clock visual value");
 
           assert.strictEqual(
             visualValue,
@@ -338,7 +265,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("4.1.3 chat clock snapshots do NOT update actor on click (by design)", async function () {
+        t.test("chat clock snapshots do NOT update actor on click (by design)", async function () {
           this.timeout(15000);
 
           // Create clock at value 1
@@ -356,15 +283,11 @@ Hooks.on("quenchReady", (quench) => {
 
           // Create chat message - this will be a snapshot by design
           chatMessage = await createClockChatMessage(clockActor);
+          assert.ok(chatMessage, "Chat message creation should succeed");
 
           // Wait for clock enrichment with retry
           const clockEl = await waitForClockInChat(chatMessage, 3000);
-          if (!clockEl) {
-            // Clock enrichment not available after waiting
-            console.log("[GlobalClocks Test] Clock enrichment not available after retry");
-            this.skip();
-            return;
-          }
+          assert.ok(clockEl, "Clock should render in chat after enrichment");
 
           // Try to click a segment - this should NOT update the actor (snapshot behavior)
           const label = clockEl.querySelector('label.radio-toggle');
@@ -391,7 +314,7 @@ Hooks.on("quenchReady", (quench) => {
         });
       });
 
-      describe("4.2 Clocks in Notes Tab", function () {
+      t.section("Clocks in Notes Tab", () => {
         let actor;
         let clockActor;
 
@@ -428,7 +351,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("4.2.1 clock in character Notes tab renders interactively", async function () {
+        t.test("clock in character Notes tab renders interactively", async function () {
           this.timeout(10000);
 
           // Create clock actor first
@@ -482,7 +405,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("4.2.2 click clock in Notes tab updates clock actor", async function () {
+        t.test("click clock in Notes tab updates clock actor", async function () {
           this.timeout(10000);
 
           // Create clock actor
@@ -525,14 +448,11 @@ Hooks.on("quenchReady", (quench) => {
 
           // CRITICAL: Capture initial value
           const initialValue = clockActor.system?.value;
+          assert.strictEqual(initialValue, 1, "Clock should start at value 1");
 
           // Click segment 2
           const labels = clockEl.querySelectorAll('label.radio-toggle');
-          if (labels.length < 2) {
-            console.log("[GlobalClocks Test] Not enough clock labels found");
-            this.skip();
-            return;
-          }
+          assert.ok(labels.length >= 2, "Clock should have at least 2 segment labels");
 
           const updatePromise = waitForActorUpdate(clockActor, { timeoutMs: 2000 }).catch(() => {});
           // Use explicit MouseEvent for reliable jQuery delegation (bubbles to document.body)
@@ -545,18 +465,18 @@ Hooks.on("quenchReady", (quench) => {
           await updatePromise;
           await new Promise((resolve) => setTimeout(resolve, 200));
 
-          // CRITICAL: Verify clock actor was updated
+          // CRITICAL: Verify clock actor was updated to exact value
           const newValue = clockActor.system?.value;
-          assert.notStrictEqual(
+          assert.strictEqual(
             newValue,
-            initialValue,
-            `Clock value should change after click in Notes tab (was ${initialValue}, now ${newValue})`
+            2,
+            `Clicking segment 2 should set clock value to 2 (was ${initialValue}, now ${newValue})`
           );
 
           console.log(`[GlobalClocks Test] Notes tab clock updated: ${initialValue} → ${newValue}`);
         });
 
-        it("4.2.3 clock in crew Notes tab renders interactively", async function () {
+        t.test("clock in crew Notes tab renders interactively", async function () {
           this.timeout(10000);
 
           // Create clock actor
@@ -603,7 +523,7 @@ Hooks.on("quenchReady", (quench) => {
         });
       });
 
-      describe("4.3 Healing Clock in Harm Popup", function () {
+      t.section("Healing Clock in Harm Popup", () => {
         let actor;
 
         beforeEach(async function () {
@@ -632,14 +552,14 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("4.3.0 harm box exists on character sheet", async function () {
+        t.test("harm box exists on character sheet", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
           const harmBox = root.querySelector(".harm-box");
           assert.ok(harmBox, "Harm box should exist on character sheet");
         });
 
-        it("4.3.0 harm box toggles open on click", async function () {
+        t.test("harm box toggles open on click", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
 
@@ -651,7 +571,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(isHarmBoxOpen(root), "Harm box should be open after click");
         });
 
-        it("4.3.1 healing clock visible in harm popup", async function () {
+        t.test("healing clock visible in harm popup", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
 
@@ -662,7 +582,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(healingClock, "Healing clock should be visible in open harm box");
         });
 
-        it("4.3.2 click healing clock in harm popup updates character", async function () {
+        t.test("click healing clock in harm popup updates character", async function () {
           this.timeout(8000);
 
           // Set initial value
@@ -676,17 +596,11 @@ Hooks.on("quenchReady", (quench) => {
           await new Promise((resolve) => setTimeout(resolve, 100));
 
           const healingClock = findHealingClockInHarmBox(root);
-          if (!healingClock) {
-            this.skip();
-            return;
-          }
+          assert.ok(healingClock, "Healing clock should be visible in open harm box");
 
           // Click segment 3
           const labels = healingClock.querySelectorAll("label.radio-toggle");
-          if (labels.length < 3) {
-            this.skip();
-            return;
-          }
+          assert.ok(labels.length >= 3, "Healing clock should have at least 3 segment labels");
 
           const updatePromise = waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           // Use explicit MouseEvent for reliable jQuery delegation (bubbles to document.body)
@@ -700,13 +614,14 @@ Hooks.on("quenchReady", (quench) => {
           await new Promise((resolve) => setTimeout(resolve, 100));
 
           const newValue = actor.system?.healing_clock?.value;
-          assert.ok(
-            newValue === 3 || newValue === 0,
-            "Healing clock value should change (3 if increment, 0 if toggle)"
+          assert.strictEqual(
+            newValue,
+            3,
+            `Clicking segment 3 should set healing clock to 3 (got ${newValue})`
           );
         });
 
-        it("4.3.3 right-click healing clock decrements", async function () {
+        t.test("right-click healing clock decrements", async function () {
           this.timeout(8000);
 
           // Set initial value to 3
@@ -720,10 +635,7 @@ Hooks.on("quenchReady", (quench) => {
           await new Promise((resolve) => setTimeout(resolve, 100));
 
           const healingClock = findHealingClockInHarmBox(root);
-          if (!healingClock) {
-            this.skip();
-            return;
-          }
+          assert.ok(healingClock, "Healing clock should be visible in open harm box");
 
           const updatePromise = waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           healingClock.dispatchEvent(new MouseEvent("contextmenu", {
@@ -739,7 +651,7 @@ Hooks.on("quenchReady", (quench) => {
         });
       });
 
-      describe("4.4 Clocks in Journal Pages", function () {
+      t.section("Clocks in Journal Pages", () => {
         let clockActor;
         let journal;
 
@@ -776,7 +688,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("4.4.1 clock in journal page renders interactively", async function () {
+        t.test("clock in journal page renders interactively", async function () {
           this.timeout(15000);
 
           // Create clock actor
@@ -844,7 +756,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("4.4.2 click clock in journal updates clock actor", async function () {
+        t.test("click clock in journal updates clock actor", async function () {
           this.timeout(10000);
 
           // Create clock actor
@@ -890,14 +802,11 @@ Hooks.on("quenchReady", (quench) => {
 
           // CRITICAL: Capture initial value
           const initialValue = clockActor.system?.value;
+          assert.strictEqual(initialValue, 1, "Clock should start at value 1");
 
           // Click segment 2
           const labels = clockEl.querySelectorAll('label.radio-toggle');
-          if (labels.length < 2) {
-            console.log("[GlobalClocks Test] Not enough clock labels in journal");
-            this.skip();
-            return;
-          }
+          assert.ok(labels.length >= 2, "Clock should have at least 2 segment labels");
 
           const updatePromise = waitForActorUpdate(clockActor, { timeoutMs: 2000 }).catch(() => {});
           // Use explicit MouseEvent for reliable jQuery delegation (bubbles to document.body)
@@ -910,18 +819,18 @@ Hooks.on("quenchReady", (quench) => {
           await updatePromise;
           await new Promise((resolve) => setTimeout(resolve, 200));
 
-          // CRITICAL: Verify clock actor was updated
+          // CRITICAL: Verify clock actor was updated to exact value
           const newValue = clockActor.system?.value;
-          assert.notStrictEqual(
+          assert.strictEqual(
             newValue,
-            initialValue,
-            `Clock value should change after click in journal (was ${initialValue}, now ${newValue})`
+            2,
+            `Clicking segment 2 should set clock value to 2 (was ${initialValue}, now ${newValue})`
           );
 
           console.log(`[GlobalClocks Test] Journal clock updated: ${initialValue} → ${newValue}`);
         });
 
-        it("4.4.3 right-click clock in journal decrements", async function () {
+        t.test("right-click clock in journal decrements", async function () {
           this.timeout(10000);
 
           // Create clock at value 3

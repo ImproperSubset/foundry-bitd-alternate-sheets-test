@@ -10,6 +10,7 @@ import {
   testCleanup,
   cleanupTestActors,
   closeAllDialogs,
+  TestNumberer,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -216,6 +217,8 @@ function isTextInputDialog(dialog) {
   return hasTextInput && !hasRadios;
 }
 
+const t = new TestNumberer("9");
+
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
     console.warn(`[${MODULE_ID}] bitd-alternate-sheets not active, skipping NPC integration tests`);
@@ -225,9 +228,9 @@ Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
     "bitd-alternate-sheets.npc-integration",
     (context) => {
-      const { describe, it, assert, beforeEach, afterEach } = context;
+      const { assert, beforeEach, afterEach } = context;
 
-      describe("9.1 NPC Vice Purveyors", function () {
+      t.section("NPC Vice Purveyors", () => {
         let actor;
         let npcActors = [];
         let originalPopulateFromWorld;
@@ -279,7 +282,7 @@ Hooks.on("quenchReady", (quench) => {
           actor = null;
         });
 
-        it("9.1.0 vice purveyor smart field exists on character sheet", async function () {
+        t.test("vice purveyor smart field exists on character sheet", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
 
@@ -305,7 +308,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("9.1.1 NPCs with associated_class='Vice Purveyor' appear in dialog", async function () {
+        t.test("NPCs with associated_class='Vice Purveyor' appear in dialog", async function () {
           this.timeout(15000);
 
           // Create an NPC with associated_class = "Vice Purveyor" (the filter value used by the smart field)
@@ -372,7 +375,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("9.1.2 selecting vice purveyor via dialog updates actor flag", async function () {
+        t.test("selecting vice purveyor via dialog updates actor flag", async function () {
           this.timeout(15000);
 
           // Create an NPC with the correct associated_class
@@ -467,7 +470,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("9.1.3 vice purveyor display shows selected NPC name", async function () {
+        t.test("vice purveyor display shows selected NPC name", async function () {
           this.timeout(15000);
 
           // Create an NPC and set it as the vice purveyor
@@ -517,7 +520,7 @@ Hooks.on("quenchReady", (quench) => {
           console.log(`[NPC Test] Vice purveyor displays: "${displayText}"`);
         });
 
-        it("9.1.4 no Vice Purveyor NPCs → text input fallback dialog", async function () {
+        t.test("no Vice Purveyor NPCs → text input fallback dialog", async function () {
           this.timeout(15000);
 
           // Ensure NO NPCs with associated_class="Vice Purveyor" exist

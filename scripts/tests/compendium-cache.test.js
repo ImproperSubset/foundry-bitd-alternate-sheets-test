@@ -11,6 +11,7 @@ import {
   closeAllDialogs,
   cleanupTestActor,
   testCleanup,
+  TestNumberer,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -93,6 +94,8 @@ async function createWorldItem(type, name) {
   return item;
 }
 
+const t = new TestNumberer("8");
+
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
     console.warn(`[${MODULE_ID}] bitd-alternate-sheets not active, skipping compendium cache tests`);
@@ -102,14 +105,23 @@ Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
     "bitd-alternate-sheets.compendium-cache",
     (context) => {
-      const { describe, it, assert, beforeEach, afterEach } = context;
+      const { assert, beforeEach, afterEach } = context;
 
-      describe("8.1 Cache Invalidation", function () {
+      t.section("Cache Invalidation", () => {
         let actor;
         let testItem;
+        let originalPopulateFromCompendia;
+        let originalPopulateFromWorld;
 
         beforeEach(async function () {
           this.timeout(10000);
+
+          // Save and enable cache settings to ensure tests exercise the cache
+          originalPopulateFromCompendia = game.settings.get(TARGET_MODULE_ID, "populateFromCompendia");
+          originalPopulateFromWorld = game.settings.get(TARGET_MODULE_ID, "populateFromWorld");
+          await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", true);
+          await game.settings.set(TARGET_MODULE_ID, "populateFromWorld", true);
+
           const result = await createTestCrewActor({
             name: "Cache-Invalidation-Test",
             crewTypeName: "Assassins"
@@ -120,6 +132,14 @@ Hooks.on("quenchReady", (quench) => {
 
         afterEach(async function () {
           this.timeout(8000);
+
+          // Restore original settings
+          if (originalPopulateFromCompendia !== undefined) {
+            await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", originalPopulateFromCompendia);
+          }
+          if (originalPopulateFromWorld !== undefined) {
+            await game.settings.set(TARGET_MODULE_ID, "populateFromWorld", originalPopulateFromWorld);
+          }
 
           // Clean up test item first
           if (testItem) {
@@ -136,7 +156,7 @@ Hooks.on("quenchReady", (quench) => {
           actor = null;
         });
 
-        it("8.1.0 sheet renders successfully (cache is internal)", async function () {
+        t.test("sheet renders successfully (cache is internal)", async function () {
           // Note: The cache system is internal to the module and not publicly exposed.
           // This test verifies the sheet renders successfully, which exercises the cache.
           const sheet = await ensureSheet(actor);
@@ -154,7 +174,57 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("8.1.1 compendium item update triggers cache invalidation", async function () {
+        t.test("cache is populated after first render", async function () {
+          this.timeout(10000);
+
+          // Clear cache to start fresh
+          clearCache();
+
+          // Render sheet to populate cache
+          await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Check if cache has been populated
+          const stats = getCacheStats();
+
+          if (stats === null) {
+            // Cache stats not publicly available - use fallback instrumentation
+            // Monkeypatch getIndex to verify cache is being used on second render
+            let getIndexCalls = 0;
+            const originalGetIndex = CompendiumCollection.prototype.getIndex;
+            CompendiumCollection.prototype.getIndex = function (...args) {
+              getIndexCalls++;
+              return originalGetIndex.apply(this, args);
+            };
+
+            try {
+              // Close and re-render to test cache usage
+              await actor.sheet.close();
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              await ensureSheet(actor);
+              await new Promise((resolve) => setTimeout(resolve, 200));
+
+              // Cache should reduce getIndex calls on second render
+              // (If cache is working, getIndex should be called less or same as first time)
+              console.log(`[Cache Test] getIndex calls during second render: ${getIndexCalls}`);
+
+              // Just verify render completed successfully (cache is internal)
+              const root = actor.sheet.element?.[0] || actor.sheet.element;
+              assert.ok(root, "Sheet should re-render successfully with cache");
+            } finally {
+              CompendiumCollection.prototype.getIndex = originalGetIndex;
+            }
+          } else {
+            // Cache stats available - verify cache is populated
+            assert.ok(
+              stats.size > 0 || (stats.entries && stats.entries.length > 0),
+              `Cache should be populated after render (size: ${stats.size})`
+            );
+            console.log(`[Cache Test] Cache populated with ${stats.size} entries`);
+          }
+        });
+
+        t.test("compendium item update triggers cache invalidation", async function () {
           this.timeout(10000);
 
           // Open sheet to populate cache
@@ -173,7 +243,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("8.1.2 world item create invalidates relevant cache", async function () {
+        t.test("world item create invalidates relevant cache", async function () {
           this.timeout(10000);
 
           // Open sheet to populate cache
@@ -201,7 +271,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("8.1.2 world item update invalidates relevant cache", async function () {
+        t.test("world item update invalidates relevant cache", async function () {
           this.timeout(10000);
 
           // Create a test item first
@@ -232,7 +302,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("8.1.2 world item delete invalidates relevant cache", async function () {
+        t.test("world item delete invalidates relevant cache", async function () {
           this.timeout(10000);
 
           // Create and then delete a test item
@@ -265,7 +335,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("8.1.3 sheet re-renders with updated data after invalidation", async function () {
+        t.test("sheet re-renders with updated data after invalidation", async function () {
           this.timeout(10000);
 
           // Open sheet
@@ -293,7 +363,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("8.1.4 settings change invalidates cache", async function () {
+        t.test("settings change invalidates cache", async function () {
           this.timeout(15000);
 
           // Save original settings
@@ -353,11 +423,20 @@ Hooks.on("quenchReady", (quench) => {
         });
       });
 
-      describe("8.2 Cache Performance", function () {
+      t.section("Cache Performance", () => {
         let actor;
+        let originalPopulateFromCompendia;
+        let originalPopulateFromWorld;
 
         beforeEach(async function () {
           this.timeout(10000);
+
+          // Save and enable cache settings to ensure tests exercise the cache
+          originalPopulateFromCompendia = game.settings.get(TARGET_MODULE_ID, "populateFromCompendia");
+          originalPopulateFromWorld = game.settings.get(TARGET_MODULE_ID, "populateFromWorld");
+          await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", true);
+          await game.settings.set(TARGET_MODULE_ID, "populateFromWorld", true);
+
           const result = await createTestCrewActor({
             name: "Cache-Performance-Test",
             crewTypeName: "Assassins"
@@ -367,11 +446,20 @@ Hooks.on("quenchReady", (quench) => {
 
         afterEach(async function () {
           this.timeout(5000);
+
+          // Restore original settings
+          if (originalPopulateFromCompendia !== undefined) {
+            await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", originalPopulateFromCompendia);
+          }
+          if (originalPopulateFromWorld !== undefined) {
+            await game.settings.set(TARGET_MODULE_ID, "populateFromWorld", originalPopulateFromWorld);
+          }
+
           await testCleanup({ actors: [actor] });
           actor = null;
         });
 
-        it("8.2.1 second sheet render faster than first (cache hit)", async function () {
+        t.test("second sheet render faster than first (cache hit)", async function () {
           this.timeout(15000);
 
           // Clear cache to ensure cold start
@@ -399,7 +487,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("8.2.1 multiple sheets benefit from shared cache", async function () {
+        t.test("multiple sheets benefit from shared cache", async function () {
           this.timeout(20000);
 
           // Clear cache

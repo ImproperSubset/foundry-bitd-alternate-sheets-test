@@ -13,6 +13,7 @@ import {
   closeAllDialogs,
   runClockClickTest,
   runClockRightClickTest,
+  TestNumberer,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -93,6 +94,8 @@ function rightClickClock(root) {
   }));
 }
 
+const t = new TestNumberer("7");
+
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
     console.warn(`[${MODULE_ID}] bitd-alternate-sheets not active, skipping healing clock tests`);
@@ -102,7 +105,7 @@ Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
     "bitd-alternate-sheets.healing-clock",
     (context) => {
-      const { describe, it, assert, beforeEach, afterEach } = context;
+      const { assert, beforeEach, afterEach } = context;
 
       let actor;
 
@@ -132,15 +135,15 @@ Hooks.on("quenchReady", (quench) => {
         }
       });
 
-      describe("Healing Clock Rendering", function () {
-        it("healing clock element exists on character sheet", async function () {
+      t.section("Healing Clock Rendering", () => {
+        t.test("healing clock element exists on character sheet", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
           const clockEl = findHealingClockElement(root);
           assert.ok(clockEl, "Healing clock element should exist");
         });
 
-        it("healing clock is a 4-segment clock", async function () {
+        t.test("healing clock is a 4-segment clock", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
           const clockEl = findHealingClockElement(root);
@@ -148,7 +151,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.equal(labels?.length, 4, "Healing clock should have 4 segments");
         });
 
-        it("healing clock displays correct value from system.healing_clock.value", async function () {
+        t.test("healing clock displays correct value from system.healing_clock.value", async function () {
           await setHealingClockValue(actor, 2);
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
@@ -157,7 +160,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.equal(visualValue, 2, "Clock visual should match data value");
         });
 
-        it("healing clock starts at 0 (empty) for new character", async function () {
+        t.test("healing clock starts at 0 (empty) for new character", async function () {
           await setHealingClockValue(actor, 0);
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
@@ -167,7 +170,7 @@ Hooks.on("quenchReady", (quench) => {
         });
       });
 
-      describe("Healing Clock Click Interaction", function () {
+      t.section("Healing Clock Click Interaction", () => {
         // Parameterized click test cases
         const clickTestCases = [
           { name: "clicking segment 1 when clock is empty sets value to 1", initial: 0, click: 1, expected: 1 },
@@ -178,7 +181,7 @@ Hooks.on("quenchReady", (quench) => {
         ];
 
         for (const tc of clickTestCases) {
-          it(tc.name, async function () {
+          t.test(tc.name, async function () {
             this.timeout(5000);
             await runClockClickTest({
               actor,
@@ -194,7 +197,7 @@ Hooks.on("quenchReady", (quench) => {
         }
       });
 
-      describe("Healing Clock Right-Click", function () {
+      t.section("Healing Clock Right-Click", () => {
         // Parameterized right-click test cases
         const rightClickTestCases = [
           { name: "right-click on clock decrements value by 1", initial: 3, expected: 2 },
@@ -202,7 +205,7 @@ Hooks.on("quenchReady", (quench) => {
         ];
 
         for (const tc of rightClickTestCases) {
-          it(tc.name, async function () {
+          t.test(tc.name, async function () {
             this.timeout(5000);
             await runClockRightClickTest({
               actor,
@@ -216,7 +219,7 @@ Hooks.on("quenchReady", (quench) => {
           });
         }
 
-        it("multiple right-clicks decrement correctly", async function () {
+        t.test("multiple right-clicks decrement correctly", async function () {
           this.timeout(5000);
           await setHealingClockValue(actor, 4);
           const sheet = await ensureSheet(actor);

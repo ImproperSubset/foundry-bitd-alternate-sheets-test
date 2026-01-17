@@ -10,6 +10,7 @@ import {
   ensureSheet,
   waitForActorUpdate,
   isTargetModuleActive,
+  TestNumberer,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -70,6 +71,8 @@ function createRenderTracker(sheet) {
   };
 }
 
+const t = new TestNumberer("13");
+
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
     console.warn(`[${MODULE_ID}] bitd-alternate-sheets not active, skipping crew member rerender tests`);
@@ -79,7 +82,7 @@ Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
     "bitd-alternate-sheets.crew-member-rerender",
     (context) => {
-      const { describe, it, assert, beforeEach, afterEach } = context;
+      const { assert, beforeEach, afterEach } = context;
 
       let crewActor;
       let memberActor;
@@ -142,8 +145,8 @@ Hooks.on("quenchReady", (quench) => {
         nonMemberActor = null;
       });
 
-      describe("13.1 Crew Member Sheet Rerender", function () {
-        it("13.1.0 character is linked to crew via system.crew", async function () {
+      t.section("Crew Member Sheet Rerender", () => {
+        t.test("character is linked to crew via system.crew", async function () {
           const crewData = memberActor.system?.crew;
           assert.ok(Array.isArray(crewData), "system.crew should be an array");
           assert.ok(
@@ -152,14 +155,14 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("13.1.0 non-member is not linked to crew", async function () {
+        t.test("non-member is not linked to crew", async function () {
           const crewData = nonMemberActor.system?.crew;
           const isLinked = Array.isArray(crewData) &&
             crewData.some((entry) => entry?.id === crewActor.id);
           assert.ok(!isLinked, "Non-member should not be linked to crew");
         });
 
-        it("13.1.1 crew upgrade triggers member sheet rerender", async function () {
+        t.test("crew upgrade triggers member sheet rerender", async function () {
           this.timeout(10000);
 
           // Open all sheets
@@ -205,7 +208,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("13.1.2 crew upgrade does not rerender non-member sheets", async function () {
+        t.test("crew upgrade does not rerender non-member sheets", async function () {
           this.timeout(10000);
 
           // Open all sheets
@@ -252,7 +255,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("13.1.3 only open member sheets are re-rendered", async function () {
+        t.test("only open member sheets are re-rendered", async function () {
           this.timeout(10000);
 
           // Open crew sheet but NOT the member sheet

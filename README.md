@@ -39,11 +39,11 @@ quench.runBatches("bitd-alternate-sheets.crew-sheet");
 | Batch | Description |
 |-------|-------------|
 | `teeth` | XP teeth toggle behavior |
-| `binary-checkboxes` | Action rating checkboxes |
+| `binary-checkboxes` | Gear/load item equipping and equipped-items flags |
 | `edit-mode` | Edit/lock mode toggling |
 | `smart-fields` | Smart field click-to-edit dialogs |
 | `crew-sheet` | Crew sheet rendering and upgrades |
-| `crew-radio-toggle` | Crew upgrade radio buttons |
+| `crew-radio-toggle` | Crew tier/heat/wanted radio buttons |
 | `crew-member-rerender` | Crew member sheet updates |
 | `compendium-cache` | Compendium caching and invalidation |
 | `global-clocks` | Clock rendering in sheets, journals, chat |

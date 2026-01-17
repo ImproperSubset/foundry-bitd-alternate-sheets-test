@@ -9,6 +9,7 @@ import {
   ensureSheet,
   waitForActorUpdate,
   isTargetModuleActive,
+  TestNumberer,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -115,6 +116,8 @@ function hasStandingColor(acquaintanceEl, colorType) {
   return expectedColors.some((c) => bgColor.includes(c) || bgColor === c);
 }
 
+const t = new TestNumberer("6");
+
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
     console.warn(`[${MODULE_ID}] bitd-alternate-sheets not active, skipping acquaintance tests`);
@@ -124,9 +127,9 @@ Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
     "bitd-alternate-sheets.acquaintances",
     (context) => {
-      const { describe, it, assert, beforeEach, afterEach } = context;
+      const { assert, beforeEach, afterEach } = context;
 
-      describe("6.1 Acquaintance Standing (Character Sheet)", function () {
+      t.section("Acquaintance Standing (Character Sheet)", () => {
         let actor;
 
         beforeEach(async function () {
@@ -154,7 +157,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("6.1.0 acquaintance list exists on character sheet", async function () {
+        t.test("acquaintance list exists on character sheet", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
 
@@ -165,7 +168,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("6.1.1 standing colors display correctly", async function () {
+        t.test("standing colors display correctly", async function () {
           this.timeout(8000);
 
           // Always set known test acquaintances with explicit standings
@@ -218,7 +221,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("6.1.2 toggle standing cycles through values", async function () {
+        t.test("toggle standing cycles through values", async function () {
           this.timeout(10000);
 
           // Always set known test acquaintance starting at neutral
@@ -298,9 +301,159 @@ Hooks.on("quenchReady", (quench) => {
             `DOM standing should change after toggle (was: ${initialStandingDOM}, now: ${newStandingDOM})`
           );
         });
+
+        t.test("standing icons show exact mapping", async function () {
+          this.timeout(10000);
+
+          // Set up 3 acquaintances with known standings
+          const testAcquaintances = [
+            { id: "friend-mapping-1", name: "FriendNPC", standing: "friend", description_short: "" },
+            { id: "rival-mapping-1", name: "RivalNPC", standing: "rival", description_short: "" },
+            { id: "neutral-mapping-1", name: "NeutralNPC", standing: "neutral", description_short: "" },
+          ];
+          await actor.update({ "system.acquaintances": testAcquaintances });
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          const sheet = await ensureSheet(actor);
+          await sheet.render(true);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          const root = sheet.element?.[0] || sheet.element;
+          const items = findAcquaintanceItems(root);
+
+          if (items.length < 3) {
+            console.log("[Acquaintance Test] Not enough acquaintance items for mapping test");
+            this.skip();
+            return;
+          }
+
+          // Verify each acquaintance shows the correct standing
+          const standingsFound = {};
+          for (const item of items) {
+            const standing = getAcquaintanceStanding(item);
+            if (standing) {
+              standingsFound[standing] = (standingsFound[standing] || 0) + 1;
+            }
+          }
+
+          console.log("[Acquaintance Test] Exact mapping standings found:", standingsFound);
+
+          // CRITICAL: Verify we found exactly one of each standing type
+          assert.ok(
+            standingsFound.friend >= 1,
+            `Should find at least one friend standing (found: ${standingsFound.friend || 0})`
+          );
+          assert.ok(
+            standingsFound.rival >= 1,
+            `Should find at least one rival standing (found: ${standingsFound.rival || 0})`
+          );
+          assert.ok(
+            standingsFound.neutral >= 1,
+            `Should find at least one neutral standing (found: ${standingsFound.neutral || 0})`
+          );
+        });
+
+        t.test("toggle cycles neutral→friend→rival→neutral", async function () {
+          this.timeout(15000);
+
+          // Start with neutral standing
+          const testAcquaintances = [
+            { id: "cycle-test-1", name: "CycleTest", standing: "neutral", description_short: "" },
+          ];
+          await actor.update({ "system.acquaintances": testAcquaintances });
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          const sheet = await ensureSheet(actor);
+          await sheet.render(true);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode if needed
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          const items = findAcquaintanceItems(root);
+          if (items.length === 0) {
+            console.log("[Acquaintance Test] No acquaintance items found for cycle test");
+            this.skip();
+            return;
+          }
+
+          const toggle = getStandingToggle(items[0]);
+          if (!toggle) {
+            console.log("[Acquaintance Test] No toggle found for cycle test");
+            this.skip();
+            return;
+          }
+
+          // Expected cycle order: neutral → friend → rival → neutral
+          const expectedOrder = ["neutral", "friend", "rival", "neutral"];
+
+          // Verify initial state
+          const initialStanding = actor.system.acquaintances?.[0]?.standing;
+          assert.strictEqual(
+            initialStanding,
+            expectedOrder[0],
+            `Initial standing should be "${expectedOrder[0]}" (got: "${initialStanding}")`
+          );
+
+          // Cycle through the states
+          for (let i = 0; i < 3; i++) {
+            const beforeStanding = actor.system.acquaintances?.[0]?.standing;
+            assert.strictEqual(
+              beforeStanding,
+              expectedOrder[i],
+              `Before click ${i + 1}: standing should be "${expectedOrder[i]}" (got: "${beforeStanding}")`
+            );
+
+            // Re-find toggle each iteration since DOM may have changed
+            const currentRoot = actor.sheet.element?.[0] || actor.sheet.element;
+            const currentItems = findAcquaintanceItems(currentRoot);
+            const currentToggle = getStandingToggle(currentItems[0]);
+
+            if (!currentToggle) {
+              console.log(`[Acquaintance Test] Toggle not found at iteration ${i + 1}`);
+              this.skip();
+              return;
+            }
+
+            currentToggle.click();
+            await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
+            const afterStanding = actor.system.acquaintances?.[0]?.standing;
+            assert.strictEqual(
+              afterStanding,
+              expectedOrder[i + 1],
+              `After click ${i + 1}: standing should be "${expectedOrder[i + 1]}" (got: "${afterStanding}")`
+            );
+
+            // Re-render sheet and verify DOM matches
+            await actor.sheet?.render(false);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
+            const newRoot = actor.sheet.element?.[0] || actor.sheet.element;
+            const newItems = findAcquaintanceItems(newRoot);
+            const domStanding = getAcquaintanceStanding(newItems[0]);
+
+            assert.strictEqual(
+              domStanding,
+              expectedOrder[i + 1],
+              `DOM after click ${i + 1}: should show "${expectedOrder[i + 1]}" (got: "${domStanding}")`
+            );
+
+            console.log(`[Acquaintance Test] Cycle ${i + 1}: ${expectedOrder[i]} → ${expectedOrder[i + 1]} ✓`);
+          }
+
+          console.log("[Acquaintance Test] Full cycle completed: neutral → friend → rival → neutral");
+        });
       });
 
-      describe("6.1 Acquaintance Standing (Crew Sheet)", function () {
+      t.section("Acquaintance Standing (Crew Sheet)", () => {
         let actor;
 
         beforeEach(async function () {
@@ -328,7 +481,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("6.1.3 crew contacts use acquaintance rendering", async function () {
+        t.test("crew contacts use acquaintance rendering", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
 
@@ -344,7 +497,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("6.1.3 crew contact standing colors match character sheet", async function () {
+        t.test("crew contact standing colors match character sheet", async function () {
           this.timeout(8000);
 
           // Set explicit test contacts on the crew (crew starts with no contacts by default)

@@ -14,12 +14,15 @@ import {
   setCrewStat,
   isTargetModuleActive,
   runCrewTeethTest,
+  TestNumberer,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
 
 // Stats that use radio toggle teeth on crew sheets
 const CREW_STATS = ["tier", "heat", "wanted"];
+
+const t = new TestNumberer("12");
 
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
@@ -30,7 +33,7 @@ Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
     "bitd-alternate-sheets.crew-radio-toggle",
     (context) => {
-      const { describe, it, assert, beforeEach, afterEach } = context;
+      const { assert, beforeEach, afterEach } = context;
 
       let actor;
 
@@ -58,13 +61,13 @@ Hooks.on("quenchReady", (quench) => {
         }
       });
 
-      describe("Crew Sheet Setup", function () {
-        it("creates crew actor successfully", function () {
+      t.section("Crew Sheet Setup", () => {
+        t.test("creates crew actor successfully", function () {
           assert.ok(actor, "Actor should exist");
           assert.equal(actor.type, "crew", "Actor should be crew type");
         });
 
-        it("crew sheet renders with alternate sheet class", async function () {
+        t.test("crew sheet renders with alternate sheet class", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
           assert.ok(root?.classList?.contains("blades-alt"), "Sheet should have blades-alt class");
@@ -72,13 +75,13 @@ Hooks.on("quenchReady", (quench) => {
       });
 
       for (const stat of CREW_STATS) {
-        describe(`${stat} teeth`, function () {
-          it(`has max ${stat} greater than zero`, function () {
+        t.section(`${stat} teeth`, () => {
+          t.test(`has max ${stat} greater than zero`, function () {
             const max = getCrewStatMax(actor, stat);
             assert.ok(max > 0, `${stat} max should be > 0, got ${max}`);
           });
 
-          it(`starts with no teeth lit when ${stat} is 0`, async function () {
+          t.test(`starts with no teeth lit when ${stat} is 0`, async function () {
             this.timeout(5000);
             await setCrewStat(actor, stat, 0);
             const sheet = await ensureSheet(actor);
@@ -98,7 +101,7 @@ Hooks.on("quenchReady", (quench) => {
           ];
 
           for (const tc of clickTestCases) {
-            it(tc.name, async function () {
+            t.test(tc.name, async function () {
               this.timeout(5000);
               await runCrewTeethTest({
                 actor,
@@ -112,7 +115,7 @@ Hooks.on("quenchReady", (quench) => {
             });
           }
 
-          it(`clicking max tooth sets ${stat} to max and lights all teeth`, async function () {
+          t.test(`clicking max tooth sets ${stat} to max and lights all teeth`, async function () {
             this.timeout(5000);
             const max = getCrewStatMax(actor, stat);
             const expectedLit = Array.from({ length: max }, (_, i) => i + 1);

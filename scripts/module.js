@@ -120,6 +120,12 @@ Hooks.on("quenchReports", (report) => {
       const data = JSON.parse(report.json);
       const stats = data.stats || {};
 
+      // Debug: log what we have for pending tests
+      console.log(`[${MODULE_ID}] Quench report pending stats: pending=${stats.pending}, pending array length=${data.pending?.length || 0}`);
+      if (data.pending?.length > 0) {
+        console.log(`[${MODULE_ID}] First pending test:`, data.pending[0]);
+      }
+
       // Separate disabled tests from unexpected skips
       const disabledTests = (data.pending || []).filter(t =>
         t.fullTitle?.includes("[DISABLED]") || t.title?.includes("[DISABLED]")

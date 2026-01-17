@@ -9,6 +9,7 @@ import {
   waitForActorUpdate,
   isTargetModuleActive,
   closeAllDialogs,
+  TestNumberer,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -106,16 +107,26 @@ function isItemSelected(itemEl) {
  * @returns {number}
  */
 function getItemLoad(itemEl) {
-  const loadEl = itemEl.querySelector(".item-load, .load, [data-load]");
+  // Template uses data-item-load="{{default item.system.load 1}}"
+  if (itemEl.dataset?.itemLoad) {
+    return parseInt(itemEl.dataset.itemLoad) || 0;
+  }
+
+  // Fallback: check for nested element with load info
+  const loadEl = itemEl.querySelector(".item-load, .load, [data-load], [data-item-load]");
   if (loadEl) {
+    if (loadEl.dataset?.itemLoad) {
+      return parseInt(loadEl.dataset.itemLoad) || 0;
+    }
     const text = loadEl.textContent?.trim();
     const match = text?.match(/(\d+)/);
     return match ? parseInt(match[1]) : 0;
   }
 
-  // Check data attribute
-  return parseInt(itemEl.dataset?.load) || 0;
+  return 0;
 }
+
+const t = new TestNumberer("11");
 
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
@@ -126,9 +137,9 @@ Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
     "bitd-alternate-sheets.binary-checkboxes",
     (context) => {
-      const { describe, it, assert, beforeEach, afterEach } = context;
+      const { assert, beforeEach, afterEach } = context;
 
-      describe("11.1 Load Indicators", function () {
+      t.section("Load Indicators", () => {
         let actor;
 
         beforeEach(async function () {
@@ -157,7 +168,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("11.1.0 load section exists on character sheet", async function () {
+        t.test("load section exists on character sheet", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
 
@@ -170,7 +181,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("11.1.1 load pills display correct load amount", async function () {
+        t.test("load pills display correct load amount", async function () {
           this.timeout(8000);
 
           const sheet = await ensureSheet(actor);
@@ -209,7 +220,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("11.1.1 selecting items updates load total", async function () {
+        t.test("selecting items updates load total", async function () {
           this.timeout(10000);
 
           const sheet = await ensureSheet(actor);
@@ -315,9 +326,211 @@ Hooks.on("quenchReady", (quench) => {
           // Log for debugging
           console.log(`[BinaryCheckboxes Test] Selected item "${toggledItemName}" (${toggledItemId}): equipped ${initialEquippedCount} → ${newEquippedCount}, load ${initialLoad} → ${newLoad}`);
         });
+
+        t.test("equipping item increases load by exact item load value", async function () {
+          this.timeout(10000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Get initial load from DOM
+          const initialLoad = getLoadValue(root);
+          if (initialLoad === null) {
+            console.log("[BinaryCheckboxes Test] Cannot read initial load value");
+            this.skip();
+            return;
+          }
+
+          // Find an unequipped item with a known load value
+          const gearItems = findGearItems(root);
+          let targetItem = null;
+          let targetCheckbox = null;
+          let itemLoadValue = 0;
+
+          // Debug: log gear items found
+          console.log(`[BinaryCheckboxes Test] Found ${gearItems.length} gear items`);
+          let unequippedCount = 0;
+          let loadInfo = [];
+
+          for (const item of gearItems) {
+            const isSelected = isItemSelected(item);
+            const loadValue = getItemLoad(item);
+            const name = item.dataset?.itemName || "unknown";
+            loadInfo.push(`${name}: selected=${isSelected}, load=${loadValue}, data-item-load="${item.dataset?.itemLoad}"`);
+
+            if (!isSelected) {
+              unequippedCount++;
+              const checkbox = item.querySelector("input[type='checkbox']");
+              if (checkbox && loadValue > 0 && !targetItem) {
+                targetItem = item;
+                targetCheckbox = checkbox;
+                itemLoadValue = loadValue;
+              }
+            }
+          }
+
+          console.log(`[BinaryCheckboxes Test] ${unequippedCount} unequipped items`);
+          console.log(`[BinaryCheckboxes Test] Item load values:`, loadInfo.slice(0, 5));
+
+          if (!targetItem || !targetCheckbox || itemLoadValue === 0) {
+            console.log("[BinaryCheckboxes Test] No unequipped item with load > 0 found");
+            this.skip();
+            return;
+          }
+
+          const itemId = targetItem.dataset?.itemId;
+          const itemName = targetItem.dataset?.itemName || "unknown";
+
+          console.log(`[BinaryCheckboxes Test] Equipping "${itemName}" with load ${itemLoadValue}`);
+
+          // Click to equip
+          targetCheckbox.click();
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Re-render and get new load
+          await actor.sheet.render(false);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          const newRoot = actor.sheet.element?.[0] || actor.sheet.element;
+          const newLoad = getLoadValue(newRoot);
+
+          if (newLoad === null) {
+            console.log("[BinaryCheckboxes Test] Cannot read new load value");
+            this.skip();
+            return;
+          }
+
+          // CRITICAL: Assert load increased by EXACT item load value
+          const expectedLoad = initialLoad + itemLoadValue;
+          assert.strictEqual(
+            newLoad,
+            expectedLoad,
+            `Load should increase by exactly ${itemLoadValue} (was ${initialLoad}, expected ${expectedLoad}, got ${newLoad})`
+          );
+
+          console.log(`[BinaryCheckboxes Test] Load increased: ${initialLoad} + ${itemLoadValue} = ${newLoad} ✓`);
+        });
+
+        t.test("unequipping item decreases load by exact item load value", async function () {
+          this.timeout(12000);
+
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // First, find and equip an item with known load value
+          const gearItems = findGearItems(root);
+          let targetItem = null;
+          let targetCheckbox = null;
+          let itemLoadValue = 0;
+          let itemId = null;
+          let itemName = null;
+
+          for (const item of gearItems) {
+            if (!isItemSelected(item)) {
+              const checkbox = item.querySelector("input[type='checkbox']");
+              const loadValue = getItemLoad(item);
+              if (checkbox && loadValue > 0) {
+                targetItem = item;
+                targetCheckbox = checkbox;
+                itemLoadValue = loadValue;
+                itemId = item.dataset?.itemId;
+                itemName = item.dataset?.itemName || "unknown";
+                break;
+              }
+            }
+          }
+
+          if (!targetItem || !targetCheckbox || itemLoadValue === 0) {
+            console.log("[BinaryCheckboxes Test] No unequipped item with load > 0 found");
+            this.skip();
+            return;
+          }
+
+          console.log(`[BinaryCheckboxes Test] First equipping "${itemName}" with load ${itemLoadValue}`);
+
+          // Equip the item first
+          targetCheckbox.click();
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Re-render and get load after equipping
+          await actor.sheet.render(false);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          root = actor.sheet.element?.[0] || actor.sheet.element;
+          const loadAfterEquip = getLoadValue(root);
+
+          if (loadAfterEquip === null) {
+            console.log("[BinaryCheckboxes Test] Cannot read load after equip");
+            this.skip();
+            return;
+          }
+
+          // Find the now-equipped item's checkbox (need to re-query after render)
+          const updatedGearItems = findGearItems(root);
+          targetCheckbox = null;
+          for (const item of updatedGearItems) {
+            const thisItemId = item.dataset?.itemId;
+            if (thisItemId === itemId && isItemSelected(item)) {
+              targetCheckbox = item.querySelector("input[type='checkbox']");
+              break;
+            }
+          }
+
+          if (!targetCheckbox) {
+            console.log("[BinaryCheckboxes Test] Cannot find equipped item checkbox");
+            this.skip();
+            return;
+          }
+
+          console.log(`[BinaryCheckboxes Test] Now unequipping "${itemName}"`);
+
+          // Unequip the item
+          targetCheckbox.click();
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Re-render and get load after unequipping
+          await actor.sheet.render(false);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          const finalRoot = actor.sheet.element?.[0] || actor.sheet.element;
+          const loadAfterUnequip = getLoadValue(finalRoot);
+
+          if (loadAfterUnequip === null) {
+            console.log("[BinaryCheckboxes Test] Cannot read load after unequip");
+            this.skip();
+            return;
+          }
+
+          // CRITICAL: Assert load decreased by EXACT item load value
+          const expectedLoad = loadAfterEquip - itemLoadValue;
+          assert.strictEqual(
+            loadAfterUnequip,
+            expectedLoad,
+            `Load should decrease by exactly ${itemLoadValue} (was ${loadAfterEquip}, expected ${expectedLoad}, got ${loadAfterUnequip})`
+          );
+
+          console.log(`[BinaryCheckboxes Test] Load decreased: ${loadAfterEquip} - ${itemLoadValue} = ${loadAfterUnequip} ✓`);
+        });
       });
 
-      describe("11.2 Binary Checkboxes", function () {
+      t.section("Binary Checkboxes", () => {
         let actor;
 
         beforeEach(async function () {
@@ -346,7 +559,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("11.2.0 binary checkboxes exist on character sheet", async function () {
+        t.test("binary checkboxes exist on character sheet", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
 
@@ -360,7 +573,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("11.2.1 toggle checkbox equips item via flag", async function () {
+        t.test("toggle checkbox equips item via flag", async function () {
           this.timeout(10000);
 
           const sheet = await ensureSheet(actor);
@@ -448,7 +661,7 @@ Hooks.on("quenchReady", (quench) => {
           console.log(`[BinaryCheckboxes Test] Equipped item "${expectedItemName || expectedItemId || 'unknown'}": equipped ${equippedCountBefore} → ${equippedCountAfter}`);
         });
 
-        it("11.2.1 untoggle checkbox unequips item via flag", async function () {
+        t.test("untoggle checkbox unequips item via flag", async function () {
           this.timeout(10000);
 
           const sheet = await ensureSheet(actor);
@@ -561,7 +774,7 @@ Hooks.on("quenchReady", (quench) => {
           console.log(`[BinaryCheckboxes Test] Unequipped item "${itemName || itemId || 'unknown'}": equipped ${equippedCountBefore} → ${equippedCountAfter}`);
         });
 
-        it("11.2.1 checkbox state reflects item ownership", async function () {
+        t.test("checkbox state reflects item ownership", async function () {
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
 

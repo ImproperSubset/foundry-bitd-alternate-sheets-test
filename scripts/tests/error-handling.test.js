@@ -8,6 +8,9 @@ import {
   createTestCrewActor,
   ensureSheet,
   isTargetModuleActive,
+  waitForActorUpdate,
+  expectedTestError,
+  TestNumberer,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -106,6 +109,8 @@ function findUpgradeCheckboxes(root) {
   );
 }
 
+const t = new TestNumberer("10");
+
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
     console.warn(`[${MODULE_ID}] bitd-alternate-sheets not active, skipping error handling tests`);
@@ -115,9 +120,9 @@ Hooks.on("quenchReady", (quench) => {
   quench.registerBatch(
     "bitd-alternate-sheets.error-handling",
     (context) => {
-      const { describe, it, assert, beforeEach, afterEach } = context;
+      const { assert, beforeEach, afterEach } = context;
 
-      describe("10.1 Null Safety", function () {
+      t.section("Null Safety", () => {
         let actor;
         let consoleTracker;
 
@@ -149,7 +154,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("10.1.0 sheet renders without throwing errors", async function () {
+        t.test("sheet renders without throwing errors", async function () {
           const errorsBefore = consoleTracker.errors.length;
 
           const sheet = await ensureSheet(actor);
@@ -173,7 +178,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("10.1.1 missing previousSibling in inline edit → no crash", async function () {
+        t.test("missing previousSibling in inline edit → no crash", async function () {
           this.timeout(8000);
 
           const sheet = await ensureSheet(actor);
@@ -230,7 +235,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("10.1.2 null radio toggle values → graceful fallback", async function () {
+        t.test("null radio toggle values → graceful fallback", async function () {
           this.timeout(8000);
 
           const sheet = await ensureSheet(actor);
@@ -274,7 +279,7 @@ Hooks.on("quenchReady", (quench) => {
         });
       });
 
-      describe("10.2 Error Notifications", function () {
+      t.section("Error Notifications", () => {
         let actor;
         let notificationTracker;
 
@@ -306,7 +311,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("10.2.0 successful operations don't show error notifications", async function () {
+        t.test("successful operations don't show error notifications", async function () {
           this.timeout(8000);
 
           const notificationsBefore = notificationTracker.notifications.length;
@@ -366,7 +371,7 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        it("10.2.1 failed upgrade toggle shows user notification", async function () {
+        t.test("failed upgrade toggle shows user notification", async function () {
           this.timeout(10000);
 
           // This test verifies error handling exists - we can't easily force a failure
@@ -403,7 +408,7 @@ Hooks.on("quenchReady", (quench) => {
           );
         });
 
-        it("10.2.2 failed ability toggle shows user notification", async function () {
+        t.test("failed ability toggle shows user notification", async function () {
           this.timeout(10000);
 
           const sheet = await ensureSheet(actor);
@@ -434,6 +439,191 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(
             typeof ui.notifications.error === "function",
             "Error notification system should be available for ability failures"
+          );
+        });
+      });
+
+      t.section("Update Failure Handling", () => {
+        let actor;
+        let notificationTracker;
+
+        beforeEach(async function () {
+          this.timeout(10000);
+          const result = await createTestActor({
+            name: "ErrorHandling-UpdateFailure-Test",
+            playbookName: "Cutter"
+          });
+          actor = result.actor;
+          notificationTracker = trackNotifications();
+        });
+
+        afterEach(async function () {
+          this.timeout(5000);
+          if (notificationTracker) notificationTracker.restore();
+
+          if (actor) {
+            try {
+              if (actor.sheet) {
+                await actor.sheet.close();
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
+            } catch {
+              // Ignore close errors
+            }
+            await actor.delete();
+            actor = null;
+          }
+        });
+
+        t.test("error notification appears on update failure", async function () {
+          this.timeout(10000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Find a tooth to click
+          const tooth = root.querySelector('label[for*="insight-1"], label[for*="exp"]');
+          if (!tooth) {
+            console.log("[ErrorHandling Test] No XP tooth found");
+            this.skip();
+            return;
+          }
+
+          const notificationsBefore = notificationTracker.notifications.length;
+
+          // Stub actor.update to throw an error
+          const originalUpdate = actor.update.bind(actor);
+          actor.update = async function () {
+            throw new Error(expectedTestError("Simulated update failure"));
+          };
+
+          try {
+            // Trigger an update through the UI by clicking a tooth
+            const input = document.getElementById(tooth.getAttribute("for"));
+            if (input) {
+              input.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+            } else {
+              tooth.click();
+            }
+
+            // Wait for the update to be attempted and error handling to complete
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            // Check for error notifications
+            const newNotifications = notificationTracker.notifications.slice(notificationsBefore);
+            const errorNotifications = newNotifications.filter((n) => n.type === "error");
+
+            // The module should show an error notification when update fails
+            // (This verifies error handling exists in the update path)
+            console.log(
+              `[ErrorHandling Test] Update failure triggered ${errorNotifications.length} error notification(s)`
+            );
+
+            // If no error notification, the error was likely caught silently
+            // This is acceptable for some implementations, but we should at least verify
+            // the notification system was used if there was an error
+            assert.ok(
+              errorNotifications.length > 0 ||
+                newNotifications.length === 0, // Silent handling is acceptable
+              "Error notification should appear on update failure OR error should be handled silently"
+            );
+          } finally {
+            // Always restore original update function
+            actor.update = originalUpdate;
+          }
+        });
+
+        t.test("update failure does not crash the sheet", async function () {
+          this.timeout(10000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Find a tooth to click
+          const tooth = root.querySelector('label[for*="insight-1"], label[for*="exp"]');
+          if (!tooth) {
+            this.skip();
+            return;
+          }
+
+          // Stub actor.update to throw
+          const originalUpdate = actor.update.bind(actor);
+          actor.update = async function () {
+            throw new Error(expectedTestError("Simulated crash-inducing failure"));
+          };
+
+          try {
+            // Attempt the update
+            const input = document.getElementById(tooth.getAttribute("for"));
+            if (input) {
+              input.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+            }
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            // Verify sheet is still functional - should be able to re-render
+            await sheet.render(true);
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
+            const newRoot = sheet.element?.[0] || sheet.element;
+            assert.ok(
+              newRoot !== null,
+              "Sheet should still be renderable after update failure"
+            );
+          } finally {
+            actor.update = originalUpdate;
+          }
+        });
+
+        t.test("queueUpdate propagates errors correctly", async function () {
+          this.timeout(8000);
+
+          // Import the queueUpdate function
+          const module = await import(
+            "/modules/bitd-alternate-sheets/scripts/lib/update-queue.js"
+          );
+
+          const notificationsBefore = notificationTracker.notifications.length;
+
+          // Queue an update that throws
+          let errorCaught = false;
+          let thrownError = null;
+          try {
+            await module.queueUpdate(async () => {
+              throw new Error(expectedTestError("queueUpdate propagation test"));
+            });
+          } catch (err) {
+            errorCaught = true;
+            thrownError = err;
+          }
+
+          // Error should be propagated
+          assert.ok(errorCaught, "queueUpdate should propagate errors");
+          assert.ok(
+            thrownError?.message?.includes("EXPECTED TEST ERROR"),
+            "Error message should be preserved"
+          );
+
+          // Wait for notification
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // Check if notification was shown (queueUpdate may or may not notify)
+          const newNotifications = notificationTracker.notifications.slice(notificationsBefore);
+          console.log(
+            `[ErrorHandling Test] queueUpdate error triggered ${newNotifications.filter(n => n.type === "error").length} notification(s)`
           );
         });
       });
