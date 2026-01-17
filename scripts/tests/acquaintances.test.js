@@ -1,6 +1,6 @@
 /**
  * Quench test batch for acquaintance sharing.
- * Tests standing colors, toggle behavior, and filtering.
+ * Tests standing colors and toggle behavior.
  */
 
 import {
@@ -113,33 +113,6 @@ function hasStandingColor(acquaintanceEl, colorType) {
   // Check background color
   const expectedColors = colorMap[colorType] || [];
   return expectedColors.some((c) => bgColor.includes(c) || bgColor === c);
-}
-
-/**
- * Find the acquaintance filter toggle.
- * @param {HTMLElement} root
- * @returns {HTMLElement|null}
- */
-function findFilterToggle(root) {
-  return root.querySelector(
-    ".filter-acquaintances, .acquaintance-filter, [data-action='filter-acquaintances'], .toggle-filter"
-  );
-}
-
-/**
- * Check if filter is currently active.
- * @param {HTMLElement} root
- * @returns {boolean}
- */
-function isFilterActive(root) {
-  const filterToggle = findFilterToggle(root);
-  if (!filterToggle) return false;
-
-  return (
-    filterToggle.classList.contains("active") ||
-    filterToggle.classList.contains("filtered") ||
-    filterToggle.checked === true
-  );
 }
 
 Hooks.on("quenchReady", (quench) => {
@@ -420,123 +393,6 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(
             hasStanding,
             `At least one crew contact should have standing styling. Found: ${JSON.stringify(foundStandings)}`
-          );
-        });
-      });
-
-      describe.skip("[DISABLED] 6.2 Acquaintance Filtering", function () {
-        let actor;
-
-        beforeEach(async function () {
-          this.timeout(10000);
-          const result = await createTestActor({
-            name: "Acquaintances-Filter-Test",
-            playbookName: "Cutter"
-          });
-          actor = result.actor;
-        });
-
-        afterEach(async function () {
-          this.timeout(5000);
-          if (actor) {
-            try {
-              if (actor.sheet) {
-                await actor.sheet.close();
-                await new Promise((resolve) => setTimeout(resolve, 100));
-              }
-            } catch {
-              // Ignore close errors
-            }
-            try {
-              await actor.delete();
-            } catch {
-              // Ignore delete errors
-            }
-            actor = null;
-          }
-        });
-
-        it("6.2.1 filter toggle shows/hides non-Friend/Rival", async function () {
-          this.timeout(10000);
-
-          const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
-
-          const filterToggle = findFilterToggle(root);
-
-          if (!filterToggle) {
-            // Filter not implemented in this version
-            console.log("[Acquaintance Test] Filter toggle not found");
-            this.skip();
-            return;
-          }
-
-          const itemsBefore = findAcquaintanceItems(root);
-          const visibleBefore = Array.from(itemsBefore).filter(
-            (el) => !el.classList.contains("hidden") && el.offsetParent !== null
-          );
-
-          // Click filter toggle
-          filterToggle.click();
-          await new Promise((resolve) => setTimeout(resolve, 200));
-
-          const itemsAfter = findAcquaintanceItems(root);
-          const visibleAfter = Array.from(itemsAfter).filter(
-            (el) => !el.classList.contains("hidden") && el.offsetParent !== null
-          );
-
-          // Filter should either hide some items or show that it's working
-          // If all items are friend/rival, counts may be equal; if not, they should differ
-          console.log(`[Acquaintance Test] Visible before: ${visibleBefore.length}, after: ${visibleAfter.length}`);
-
-          // The test passes if:
-          // 1. The filter actually changed visible counts (filtering worked), OR
-          // 2. We have items and all are friend/rival (no neutral to filter)
-          const filteringOccurred = visibleBefore.length !== visibleAfter.length;
-          const hasItems = itemsBefore.length > 0;
-
-          assert.ok(
-            filteringOccurred || hasItems,
-            `Filter toggle should either change visible count or have items to filter (before: ${visibleBefore.length}, after: ${visibleAfter.length})`
-          );
-        });
-
-        it("6.2.2 filter state persists across sheet close/reopen", async function () {
-          this.timeout(10000);
-
-          let sheet = await ensureSheet(actor);
-          let root = sheet.element?.[0] || sheet.element;
-
-          const filterToggle = findFilterToggle(root);
-
-          if (!filterToggle) {
-            console.log("[Acquaintance Test] Filter toggle not found for persistence test");
-            this.skip();
-            return;
-          }
-
-          // Enable filter
-          if (!isFilterActive(root)) {
-            filterToggle.click();
-            await new Promise((resolve) => setTimeout(resolve, 100));
-          }
-
-          const filterStateBefore = isFilterActive(root);
-
-          // Close and reopen sheet
-          await sheet.close();
-          await new Promise((resolve) => setTimeout(resolve, 200));
-
-          sheet = await ensureSheet(actor);
-          root = sheet.element?.[0] || sheet.element;
-
-          const filterStateAfter = isFilterActive(root);
-
-          // Filter state should persist across sheet close/reopen
-          assert.strictEqual(
-            filterStateAfter,
-            filterStateBefore,
-            `Filter state should persist (before close: ${filterStateBefore}, after reopen: ${filterStateAfter})`
           );
         });
       });

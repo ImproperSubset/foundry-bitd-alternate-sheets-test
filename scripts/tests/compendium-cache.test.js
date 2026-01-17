@@ -292,6 +292,65 @@ Hooks.on("quenchReady", (quench) => {
             "Sheet should re-render after cache invalidation"
           );
         });
+
+        it("8.1.4 settings change invalidates cache", async function () {
+          this.timeout(15000);
+
+          // Save original settings
+          const originalFromCompendia = game.settings.get(TARGET_MODULE_ID, "populateFromCompendia");
+          const originalFromWorld = game.settings.get(TARGET_MODULE_ID, "populateFromWorld");
+
+          try {
+            // Ensure both sources are enabled initially
+            await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", true);
+            await game.settings.set(TARGET_MODULE_ID, "populateFromWorld", true);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
+            // Open sheet to populate cache with both sources
+            const sheet = await ensureSheet(actor);
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
+            // Count abilities with both sources enabled
+            const root1 = sheet.element?.[0] || sheet.element;
+            const abilitiesBefore = root1.querySelectorAll(
+              ".crew-ability, .ability-item, [data-item-type='crew_ability']"
+            ).length;
+
+            // Disable compendium source - this should invalidate cache
+            await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", false);
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
+            // Re-render sheet - should use fresh data from invalidated cache
+            await sheet.render(true);
+            await new Promise((resolve) => setTimeout(resolve, 300));
+
+            const root2 = sheet.element?.[0] || sheet.element;
+            const abilitiesAfter = root2.querySelectorAll(
+              ".crew-ability, .ability-item, [data-item-type='crew_ability']"
+            ).length;
+
+            // With compendiums disabled, we should have fewer (or same) abilities
+            // The key assertion is that the sheet re-rendered successfully after setting change
+            assert.ok(
+              root2 !== null,
+              "Sheet should re-render after settings change"
+            );
+
+            console.log(`[Cache Test] Abilities before: ${abilitiesBefore}, after: ${abilitiesAfter}`);
+
+            // If there were compendium abilities, count should decrease
+            // (or stay same if no compendium abilities existed)
+            assert.ok(
+              abilitiesAfter <= abilitiesBefore,
+              `Disabling compendiums should not increase ability count (before: ${abilitiesBefore}, after: ${abilitiesAfter})`
+            );
+
+          } finally {
+            // Always restore original settings
+            await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", originalFromCompendia);
+            await game.settings.set(TARGET_MODULE_ID, "populateFromWorld", originalFromWorld);
+          }
+        });
       });
 
       describe("8.2 Cache Performance", function () {

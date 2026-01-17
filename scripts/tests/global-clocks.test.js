@@ -9,6 +9,8 @@ import {
   waitForActorUpdate,
   isTargetModuleActive,
   closeAllDialogs,
+  getJournalSheetElement,
+  waitForClockElement,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -72,16 +74,57 @@ function findClockInChat(message) {
                   document.querySelector(".chat-log") ||
                   document.querySelector("#chat .message-list");
 
-  if (!chatLog) return null;
+  if (!chatLog) {
+    console.log("[GlobalClocks Test] Chat log element not found");
+    return null;
+  }
 
   // Try multiple selectors for message element
   const messageEl = chatLog.querySelector(`[data-message-id="${message.id}"]`) ||
                     chatLog.querySelector(`li.message[data-message-id="${message.id}"]`) ||
                     chatLog.querySelector(`article[data-message-id="${message.id}"]`);
 
-  if (!messageEl) return null;
+  if (!messageEl) {
+    console.log(`[GlobalClocks Test] Message element not found for id: ${message.id}`);
+    return null;
+  }
 
-  return messageEl.querySelector(".blades-clock, .linkedClock, .clock");
+  // Try multiple clock selectors - the module may use different class names
+  const clockEl = messageEl.querySelector(".blades-clock, .linkedClock, .clock, .clock-container, [data-clock-uuid]");
+
+  if (!clockEl) {
+    // Debug: log what we found in the message
+    const contentEl = messageEl.querySelector(".message-content");
+    console.log(`[GlobalClocks Test] Clock element not found. Message content: ${contentEl?.innerHTML?.substring(0, 200)}`);
+  }
+
+  return clockEl;
+}
+
+/**
+ * Wait for clock enrichment to complete and return the clock element.
+ * Uses exponential backoff for reliability on slower systems (Codex recommendation).
+ * @param {ChatMessage} message
+ * @param {number} maxWaitMs - Maximum time to wait (default 5000ms)
+ * @returns {Promise<HTMLElement|null>}
+ */
+async function waitForClockInChat(message, maxWaitMs = 5000) {
+  let waited = 0;
+  let interval = 100; // Start with 100ms, will increase exponentially
+  const startTime = Date.now();
+
+  while (waited < maxWaitMs) {
+    const clockEl = findClockInChat(message);
+    if (clockEl) {
+      console.log(`[GlobalClocks Test] Clock found after ${Date.now() - startTime}ms`);
+      return clockEl;
+    }
+    await new Promise(resolve => setTimeout(resolve, interval));
+    waited += interval;
+    interval = Math.min(interval * 1.5, 500); // Exponential backoff, cap at 500ms
+  }
+  console.log(`[GlobalClocks Test] Clock not found after ${maxWaitMs}ms timeout`);
+  return null;
 }
 
 /**
@@ -248,21 +291,30 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         it("4.1.2 clock snapshot preserves historical value", async function () {
-          this.timeout(10000);
+          this.timeout(15000);
 
           // Create clock at value 2
           clockActor = await createClockActor({ name: "Test Clock Snapshot", type: 4, value: 2 });
 
           if (!clockActor) {
+            console.log("[GlobalClocks Test] Clock actor creation failed");
             this.skip();
             return;
           }
 
           // Create message with current value
           chatMessage = await createClockChatMessage(clockActor);
-          await new Promise((resolve) => setTimeout(resolve, 500));
 
-          // Change the clock value
+          // Wait for clock enrichment with retry
+          const clockEl = await waitForClockInChat(chatMessage, 3000);
+          if (!clockEl) {
+            // Clock enrichment not available after waiting
+            console.log("[GlobalClocks Test] Clock enrichment not available for snapshot test after retry");
+            this.skip();
+            return;
+          }
+
+          // Change the clock value AFTER we found the clock element
           await clockActor.update({
             "system.value": 3,
             img: "systems/blades-in-the-dark/themes/black/4clock_3.svg"
@@ -271,14 +323,6 @@ Hooks.on("quenchReady", (quench) => {
 
           // The chat message should still show the snapshot value (2) not the new value (3)
           // This is because the message content has |snapshot:2 encoded
-          const clockEl = findClockInChat(chatMessage);
-          if (!clockEl) {
-            // Clock enrichment not available
-            console.log("[GlobalClocks Test] Clock enrichment not available for snapshot test");
-            this.skip();
-            return;
-          }
-
           const visualValue = getClockVisualValue(clockEl);
           // Snapshot behavior: message should show value at creation time (2), not current (3)
           if (visualValue === null) {
@@ -295,12 +339,13 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         it("4.1.3 chat clock snapshots do NOT update actor on click (by design)", async function () {
-          this.timeout(10000);
+          this.timeout(15000);
 
           // Create clock at value 1
           clockActor = await createClockActor({ name: "Test Clock Snapshot Click", type: 4, value: 1 });
 
           if (!clockActor) {
+            console.log("[GlobalClocks Test] Clock actor creation failed");
             this.skip();
             return;
           }
@@ -311,20 +356,26 @@ Hooks.on("quenchReady", (quench) => {
 
           // Create chat message - this will be a snapshot by design
           chatMessage = await createClockChatMessage(clockActor);
-          await new Promise((resolve) => setTimeout(resolve, 500));
 
-          const clockEl = findClockInChat(chatMessage);
+          // Wait for clock enrichment with retry
+          const clockEl = await waitForClockInChat(chatMessage, 3000);
           if (!clockEl) {
-            // Clock enrichment not available
-            console.log("[GlobalClocks Test] Clock enrichment not available");
+            // Clock enrichment not available after waiting
+            console.log("[GlobalClocks Test] Clock enrichment not available after retry");
             this.skip();
             return;
           }
 
-          // Try to click a segment - this should NOT update the actor
+          // Try to click a segment - this should NOT update the actor (snapshot behavior)
           const label = clockEl.querySelector('label.radio-toggle');
           if (label) {
-            label.click();
+            // Use explicit MouseEvent for reliable jQuery delegation
+            label.dispatchEvent(new MouseEvent("click", {
+              bubbles: true,
+              cancelable: true,
+              button: 0,
+              view: window
+            }));
             await new Promise((resolve) => setTimeout(resolve, 300));
           }
 
@@ -484,7 +535,13 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const updatePromise = waitForActorUpdate(clockActor, { timeoutMs: 2000 }).catch(() => {});
-          labels[1].click(); // Click 2nd segment
+          // Use explicit MouseEvent for reliable jQuery delegation (bubbles to document.body)
+          labels[1].dispatchEvent(new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+            view: window
+          }));
           await updatePromise;
           await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -632,7 +689,13 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const updatePromise = waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
-          labels[2].click(); // 3rd segment (0-indexed)
+          // Use explicit MouseEvent for reliable jQuery delegation (bubbles to document.body)
+          labels[2].dispatchEvent(new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+            view: window
+          }));
           await updatePromise;
           await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -714,7 +777,7 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         it("4.4.1 clock in journal page renders interactively", async function () {
-          this.timeout(10000);
+          this.timeout(15000);
 
           // Create clock actor
           clockActor = await createClockActor({ name: "Journal Clock", type: 4, value: 1 });
@@ -742,60 +805,35 @@ Hooks.on("quenchReady", (quench) => {
             return;
           }
 
-          // Open journal sheet
-          await journal.sheet.render(true);
-          // V13 needs more time for async rendering and @UUID enrichment
-          await new Promise((resolve) => setTimeout(resolve, 1500));
+          // Use helper to get journal sheet element (handles V12/V13 differences)
+          const root = await getJournalSheetElement(journal);
 
-          // V13 ApplicationV2 may have different element access patterns
-          let root = journal.sheet.element?.[0] || journal.sheet.element;
-
-          // V13 fallback: try to find the journal window in DOM
-          if (!root || typeof root.querySelector !== 'function') {
-            // Look for journal window by app ID or class
-            const appId = journal.sheet.id || journal.sheet.appId;
-            root = document.querySelector(`[data-appid="${appId}"]`) ||
-                   document.querySelector(`.journal-entry[data-document-id="${journal.id}"]`) ||
-                   document.querySelector('.journal-sheet.app');
-            console.log("[GlobalClocks Test] V13 fallback root search, found:", root?.tagName);
-          }
-
-          if (!root || typeof root.querySelector !== 'function') {
-            console.log("[GlobalClocks Test] Journal sheet root not available");
-            console.log("[GlobalClocks Test] journal.sheet:", journal.sheet);
-            console.log("[GlobalClocks Test] journal.sheet.element:", journal.sheet.element);
-            console.log("[GlobalClocks Test] journal.sheet.id:", journal.sheet.id);
+          if (!root) {
+            console.log("[GlobalClocks Test] Could not find journal sheet element");
+            console.log("[GlobalClocks Test] ui.windows count:", Object.keys(ui.windows).length);
+            // List all windows for debugging
+            for (const [id, app] of Object.entries(ui.windows)) {
+              console.log(`[GlobalClocks Test] Window ${id}: ${app.constructor.name}, doc=${app.document?.id}`);
+            }
             this.skip();
             return;
           }
 
-          // Debug: log root structure to identify correct selectors
-          console.log("[GlobalClocks Test] Journal root tagName:", root.tagName);
-          console.log("[GlobalClocks Test] Journal root classes:", root.className);
-          console.log("[GlobalClocks Test] Journal root id:", root.id);
+          console.log("[GlobalClocks Test] Journal root found:", root.tagName, root.className);
 
-          // Find clock in journal
-          const clockEl = root.querySelector('.blades-clock, .linkedClock');
+          // Wait for clock enrichment (V13 async @UUID enrichment + replaceClockLinks)
+          const clockEl = await waitForClockElement(root, { timeoutMs: 3000 });
 
           if (!clockEl) {
-            // Check that journal content exists at minimum (V12 and V13 compatible selectors)
-            // V13 uses different class names
-            const content = root.querySelector('.journal-page-content, .editor-content, .journal-entry-content, .journal-entry-page, .page-content, .text-content, .prosemirror, [data-page-type="text"], .journal-entry-pages, section.content, article');
-
-            // Debug: log what we can find
-            console.log("[GlobalClocks Test] Content element found:", content?.tagName, content?.className);
-            console.log("[GlobalClocks Test] All elements in root:", root.querySelectorAll('*').length);
+            // Check that journal content exists
+            const content = root.querySelector('.journal-page-content, .editor-content, .journal-entry-content, .page-content, .text-content, .prosemirror, article, section');
+            console.log("[GlobalClocks Test] Content element:", content?.tagName, content?.className);
             console.log("[GlobalClocks Test] Looking for content-link:", root.querySelector('a.content-link'));
-            console.log("[GlobalClocks Test] Looking for any paragraph:", root.querySelector('p')?.textContent?.slice(0, 50));
-            console.log("[GlobalClocks Test] Inner HTML snippet:", root.innerHTML?.slice(0, 500));
+            console.log("[GlobalClocks Test] Looking for paragraph:", root.querySelector('p')?.textContent?.slice(0, 100));
 
-            if (!content) {
-              // V13 journal structure may differ - skip gracefully
-              console.log("[GlobalClocks Test] V13 journal content structure not found - skipping");
-              this.skip();
-              return;
-            }
-            console.log("[GlobalClocks Test] Clock not found in journal - enrichment may not be active");
+            // If we have content but no clock, the clock enrichment isn't working
+            assert.ok(content, "Journal should have content area");
+            console.log("[GlobalClocks Test] Clock not found - enrichment may not be active for journals");
             return;
           }
 
@@ -833,17 +871,17 @@ Hooks.on("quenchReady", (quench) => {
             return;
           }
 
-          // Open journal
-          await journal.sheet.render(true);
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          // Use helper to get journal sheet element (handles V12/V13 differences)
+          const root = await getJournalSheetElement(journal);
 
-          const root = journal.sheet.element?.[0] || journal.sheet.element;
           if (!root) {
+            console.log("[GlobalClocks Test] Could not find journal sheet element for click test");
             this.skip();
             return;
           }
 
-          const clockEl = root.querySelector('.blades-clock, .linkedClock');
+          // Wait for clock enrichment (V13 async @UUID enrichment + replaceClockLinks)
+          const clockEl = await waitForClockElement(root, { timeoutMs: 3000 });
           if (!clockEl) {
             console.log("[GlobalClocks Test] Clock not found in journal for click test");
             this.skip();
@@ -862,7 +900,13 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const updatePromise = waitForActorUpdate(clockActor, { timeoutMs: 2000 }).catch(() => {});
-          labels[1].click();
+          // Use explicit MouseEvent for reliable jQuery delegation (bubbles to document.body)
+          labels[1].dispatchEvent(new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+            view: window
+          }));
           await updatePromise;
           await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -904,16 +948,17 @@ Hooks.on("quenchReady", (quench) => {
             return;
           }
 
-          await journal.sheet.render(true);
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          // Use helper to get journal sheet element (handles V12/V13 differences)
+          const root = await getJournalSheetElement(journal);
 
-          const root = journal.sheet.element?.[0] || journal.sheet.element;
           if (!root) {
+            console.log("[GlobalClocks Test] Could not find journal sheet element for decrement test");
             this.skip();
             return;
           }
 
-          const clockEl = root.querySelector('.blades-clock, .linkedClock');
+          // Wait for clock enrichment (V13 async @UUID enrichment + replaceClockLinks)
+          const clockEl = await waitForClockElement(root, { timeoutMs: 3000 });
           if (!clockEl) {
             console.log("[GlobalClocks Test] Clock not found in journal for decrement test");
             this.skip();

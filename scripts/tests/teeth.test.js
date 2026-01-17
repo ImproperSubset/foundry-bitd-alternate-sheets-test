@@ -60,15 +60,15 @@ Hooks.on("quenchReady", (quench) => {
         }
       });
 
-      describe("Playbook Setup", function () {
-        it("creates playbook item on actor", function () {
+      describe("1.0 Playbook Setup", function () {
+        it("1.0.0 creates playbook item on actor", function () {
           const hasClass = actor.items.some(
             (item) => item.type === "class" && item.name === playbookItem.name
           );
           assert.ok(hasClass, "Actor should have the playbook item");
         });
 
-        it("sets system.playbook to match playbook name", function () {
+        it("1.0.1 sets system.playbook to match playbook name", function () {
           assert.equal(
             actor.system.playbook,
             playbookItem.name,
@@ -78,13 +78,13 @@ Hooks.on("quenchReady", (quench) => {
       });
 
       for (const attr of ATTRIBUTES) {
-        describe(`${attr} XP teeth`, function () {
-          it("has exp_max greater than zero", function () {
+        describe(`1.1 ${attr} XP teeth`, function () {
+          it("1.1.0 has exp_max greater than zero", function () {
             const max = getAttributeExpMax(actor, attr);
             assert.ok(max > 0, `${attr} exp_max should be > 0, got ${max}`);
           });
 
-          it("starts with no teeth lit when exp is 0", async function () {
+          it("1.1.1 starts with no teeth lit when exp is 0", async function () {
             this.timeout(5000);
             await setAttributeExp(actor, attr, 0);
             const sheet = await ensureSheet(actor);
@@ -97,8 +97,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Parameterized tests for click behavior
           const clickTestCases = [
-            { name: "clicking tooth 1 sets exp to 1", initial: 0, click: 1, expected: 1, expectedLit: [1] },
-            { name: "clicking tooth 3 sets exp to 3", initial: 1, click: 3, expected: 3, expectedLit: [1, 2, 3] },
+            { name: "1.1.2 clicking tooth 1 sets exp to 1", initial: 0, click: 1, expected: 1, expectedLit: [1] },
+            { name: "1.1.3 clicking tooth 3 sets exp to 3", initial: 1, click: 3, expected: 3, expectedLit: [1, 2, 3] },
           ];
 
           for (const tc of clickTestCases) {
@@ -116,7 +116,7 @@ Hooks.on("quenchReady", (quench) => {
             });
           }
 
-          it("clicking max tooth sets exp to max and lights all teeth", async function () {
+          it("1.1.4 clicking max tooth sets exp to max and lights all teeth", async function () {
             this.timeout(5000);
             const max = getAttributeExpMax(actor, attr);
             const expectedLit = Array.from({ length: max }, (_, i) => i + 1);
@@ -131,7 +131,7 @@ Hooks.on("quenchReady", (quench) => {
             });
           });
 
-          it("clicking lit tooth 5 at max decrements to 4 (toggle behavior)", async function () {
+          it("1.1.5 clicking lit tooth 5 at max decrements to 4 (toggle behavior)", async function () {
             this.timeout(5000);
             const max = getAttributeExpMax(actor, attr);
             if (max < 5) {

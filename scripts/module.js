@@ -172,10 +172,12 @@ Hooks.on("quenchReports", (report) => {
 
       // Final status line
       console.log("%c════════════════════════════════════════════════════════════", "color: #888;");
-      if (stats.failures === 0 && stats.passes > 0) {
-        console.log("%c✓ All tests passed!", "color: green; font-weight: bold; font-size: 12px;");
-      } else if (stats.failures > 0) {
+      if (stats.failures > 0) {
         console.log(`%c✗ ${stats.failures} test(s) failed`, "color: red; font-weight: bold; font-size: 12px;");
+      } else if (stats.passes > 0 && unexpectedSkips.length > 0) {
+        console.log(`%c✓ All run tests passed (%c${unexpectedSkips.length} skipped%c)`, "color: green; font-weight: bold; font-size: 12px;", "color: orange; font-weight: bold;", "color: green;");
+      } else if (stats.passes > 0) {
+        console.log("%c✓ All tests passed!", "color: green; font-weight: bold; font-size: 12px;");
       }
       console.log("%c════════════════════════════════════════════════════════════\n", "color: #888;");
 

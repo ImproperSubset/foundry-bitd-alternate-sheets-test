@@ -5,6 +5,26 @@
 
 const TARGET_MODULE_ID = "bitd-alternate-sheets";
 
+// ============================================================================
+// V13+ Compatibility Helpers
+// ============================================================================
+
+/**
+ * Get the ActorSheet class, preferring the V13+ namespaced version.
+ * @returns {typeof ActorSheet}
+ */
+function getActorSheetClass() {
+  return foundry?.appv1?.sheets?.ActorSheet ?? ActorSheet;
+}
+
+/**
+ * Get the ItemSheet class, preferring the V13+ namespaced version.
+ * @returns {typeof ItemSheet}
+ */
+function getItemSheetClass() {
+  return foundry?.appv1?.sheets?.ItemSheet ?? ItemSheet;
+}
+
 /**
  * Wait for an actor update via Hooks.
  * @param {Actor} actor - The actor to watch
@@ -96,6 +116,142 @@ export async function ensureSheet(actor) {
   // Final delay to ensure DOM is fully settled
   await new Promise((resolve) => setTimeout(resolve, 100));
   return sheet;
+}
+
+/**
+ * Get the root element of a rendered journal sheet.
+ * Handles V12 (Application) and V13 (ApplicationV2) differences.
+ * @param {JournalEntry} journal - The journal entry
+ * @returns {Promise<HTMLElement|null>}
+ */
+export async function getJournalSheetElement(journal) {
+  if (!journal?.sheet) return null;
+
+  // Render if not already rendered
+  if (!journal.sheet.rendered) {
+    await journal.sheet.render(true);
+  }
+
+  // Wait for DOM to settle
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  // Helper to validate an element is usable (not a button, has querySelector)
+  const isValidElement = (el) => {
+    return el && typeof el.querySelector === "function" && el.tagName !== "BUTTON";
+  };
+
+  // Try standard element access (V12 style)
+  let root = journal.sheet.element?.[0] || journal.sheet.element;
+  if (isValidElement(root)) {
+    return root;
+  }
+
+  // V13 ApplicationV2: find window in ui.windows by document ID
+  for (const app of Object.values(ui.windows)) {
+    if (app.document?.id === journal.id || app.object?.id === journal.id) {
+      // Try app.element (may be jQuery-wrapped or raw HTMLElement)
+      const el = app.element?.[0] || app.element;
+      if (isValidElement(el)) {
+        return el;
+      }
+
+      // V13 ApplicationV2 may expose element differently
+      // Try _element (internal property some V13 apps use)
+      const internalEl = app._element?.[0] || app._element;
+      if (isValidElement(internalEl)) {
+        return internalEl;
+      }
+
+      // Try finding by app ID in DOM (V13 uses data-appid attribute)
+      const appId = app.appId ?? app.id;
+      const domEl = document.getElementById(`app-${appId}`) ||
+                    document.querySelector(`[data-appid="${appId}"]`) ||
+                    document.querySelector(`#${app.id}`) ||
+                    document.querySelector(`[id="${app.id}"]`);
+      if (domEl) return domEl;
+    }
+  }
+
+  // V13 specific: look for journal windows by class patterns
+  const v13JournalPatterns = [
+    '.journal-sheet.application',
+    '.journal-entry.application',
+    'journal-sheet', // Custom element name in V13
+    'journal-entry-page-sheet',
+    '.window-app.journal-sheet',
+    '.app.window-app[data-document-id]'
+  ];
+
+  for (const pattern of v13JournalPatterns) {
+    const el = document.querySelector(pattern);
+    if (el) {
+      // Verify this is our journal by checking document ID if available
+      const docId = el.dataset?.documentId;
+      if (!docId || docId === journal.id) {
+        return el;
+      }
+    }
+  }
+
+  // Fallback: search DOM for journal window by document ID
+  const byDocId = document.querySelector(`.journal-sheet[data-document-id="${journal.id}"]`) ||
+                  document.querySelector(`.journal-entry[data-document-id="${journal.id}"]`) ||
+                  document.querySelector(`[data-document-id="${journal.id}"]`);
+  if (byDocId) return byDocId;
+
+  // Fallback: search for any journal sheet window
+  const anyJournal = document.querySelector('.journal-sheet.app.window-app') ||
+                     document.querySelector('.journal-entry-sheet');
+  if (anyJournal) return anyJournal;
+
+  return null;
+}
+
+/**
+ * Wait for a clock element to appear in a container (handles async enrichment).
+ * Uses exponential backoff for reliability on slower systems (Codex recommendation).
+ * Based on debugging insights: V13 @UUID enrichment is async, and replaceClockLinks
+ * runs after enrichment. This polls until the clock appears or timeout.
+ * @param {HTMLElement} container - The container to search
+ * @param {object} options - Options
+ * @param {number} options.timeoutMs - Timeout in milliseconds (default 5000)
+ * @returns {Promise<HTMLElement|null>} - The clock element or null if not found
+ */
+export async function waitForClockElement(container, { timeoutMs = 5000 } = {}) {
+  if (!container) return null;
+
+  const start = Date.now();
+  let interval = 100; // Start with 100ms, will increase exponentially
+
+  while (Date.now() - start < timeoutMs) {
+    // Look for clock elements (may be wrapped in container or direct)
+    const clock = container.querySelector('.blades-clock') ||
+                  container.querySelector('.linkedClock .blades-clock') ||
+                  container.querySelector('.blades-clock-container .blades-clock');
+    if (clock) {
+      console.log(`[Test Utils] Clock element found after ${Date.now() - start}ms`);
+      return clock;
+    }
+
+    // Also check if the @UUID content-link still exists (enrichment not done)
+    const contentLink = container.querySelector('a.content-link[data-type="Actor"]');
+    if (!contentLink) {
+      // No content-link found - enrichment might have failed or clock replaced it
+      // Give one more check for the clock
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const finalCheck = container.querySelector('.blades-clock');
+      if (finalCheck) {
+        console.log(`[Test Utils] Clock element found after ${Date.now() - start}ms (final check)`);
+        return finalCheck;
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, interval));
+    interval = Math.min(interval * 1.5, 500); // Exponential backoff, cap at 500ms
+  }
+
+  console.log(`[Test Utils] Clock element not found after ${timeoutMs}ms timeout`);
+  return null;
 }
 
 /**
@@ -303,9 +459,13 @@ export function isTargetModuleActive() {
  * Handles both V1 apps in ui.windows and V2 DialogV2 native <dialog> elements.
  */
 export async function closeAllDialogs() {
+  // Get V13+ namespaced classes to avoid deprecation warnings
+  const ActorSheetClass = getActorSheetClass();
+  const ItemSheetClass = getItemSheetClass();
+
   // Close V1 apps in ui.windows (but not actor sheets - those are handled separately)
   for (const app of Object.values(ui.windows)) {
-    if (app.rendered && !(app instanceof ActorSheet) && !(app instanceof ItemSheet)) {
+    if (app.rendered && !(app instanceof ActorSheetClass) && !(app instanceof ItemSheetClass)) {
       try {
         await app.close();
       } catch {
@@ -314,7 +474,25 @@ export async function closeAllDialogs() {
     }
   }
 
-  // Close V2 DialogV2 elements (native <dialog> in DOM)
+  // Close V2 DialogV2 instances (V13+ registry)
+  // Only close actual dialogs, not other ApplicationV2 apps (like Quench reporter)
+  const appInstances = foundry?.applications?.instances;
+  const DialogV2Class = foundry?.applications?.api?.DialogV2;
+  if (appInstances instanceof Map && DialogV2Class) {
+    // Convert to array first - closing apps modifies the Map during iteration
+    const apps = Array.from(appInstances.values());
+    for (const app of apps) {
+      // Only close DialogV2 instances
+      if (!(app instanceof DialogV2Class)) continue;
+      try {
+        await app.close();
+      } catch {
+        // Ignore errors
+      }
+    }
+  }
+
+  // Fallback: Close any remaining V2 DialogV2 elements (native <dialog> in DOM)
   const v2Dialogs = document.querySelectorAll("dialog[open]");
   for (const dialog of v2Dialogs) {
     try {
