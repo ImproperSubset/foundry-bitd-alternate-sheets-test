@@ -1,37 +1,71 @@
-# Blades Alternate Sheets Test Harness
+# Blades Alternate Sheets Test Module
 
-Local-only helper module for automated checks against `bitd-alternate-sheets`.
+Quench-based test harness for the [Blades in the Dark Alternate Sheets](https://github.com/justinross/foundry-bitd-alternate-sheets) Foundry VTT module.
 
-## Usage
+## Requirements
 
-1. Install this module alongside `bitd-alternate-sheets` and enable it in your test world.
-2. In the browser console (or via automation), run:
+- Foundry VTT v12 or v13
+- [Blades in the Dark system](https://github.com/Dez384/foundryvtt-blades-in-the-dark)
+- [bitd-alternate-sheets module](https://github.com/justinross/foundry-bitd-alternate-sheets)
+- [Quench](https://github.com/Ethaks/FVTT-Quench) testing framework
+
+## Installation
+
+1. Install this module alongside `bitd-alternate-sheets` in your Foundry modules folder
+2. Enable both modules plus Quench in your test world
+3. Open the Quench test runner from the sidebar
+
+## Running Tests
+
+### Via Quench UI
+
+1. Click the Quench icon in the Foundry sidebar
+2. Select test batches to run (all prefixed with `bitd-alternate-sheets.`)
+3. Click "Run"
+
+### Programmatically
 
 ```js
-await game.modules.get("bitd-alternate-sheets-test").api.runTeethTest({
-  playbookName: "Cutter",
-  cleanup: true,
-});
+// Run all bitd-alternate-sheets tests
+quench.runBatches("bitd-alternate-sheets");
+
+// Run specific test batch
+quench.runBatches("bitd-alternate-sheets.teeth");
+quench.runBatches("bitd-alternate-sheets.crew-sheet");
 ```
 
-Returns `{ ok, assertions, classCheck, ... }` and deletes the test actor by default.
+## Test Batches
 
-3. Or run with console reporting:
+| Batch | Description |
+|-------|-------------|
+| `teeth` | XP teeth toggle behavior |
+| `binary-checkboxes` | Action rating checkboxes |
+| `edit-mode` | Edit/lock mode toggling |
+| `smart-fields` | Smart field click-to-edit dialogs |
+| `crew-sheet` | Crew sheet rendering and upgrades |
+| `crew-radio-toggle` | Crew upgrade radio buttons |
+| `crew-member-rerender` | Crew member sheet updates |
+| `compendium-cache` | Compendium caching and invalidation |
+| `global-clocks` | Clock rendering in sheets, journals, chat |
+| `healing-clock` | Healing clock functionality |
+| `npc-integration` | NPC/Vice Purveyor integration |
+| `acquaintances` | Acquaintance standing and display |
+| `update-queue` | Multi-client update queue |
+| `error-handling` | Error handling patterns |
 
-```js
-await game.modules.get("bitd-alternate-sheets-test").api.runTeethTestWithReport({
-  playbookName: "Cutter",
-  cleanup: true,
-});
-```
+## Test Utilities
 
-This logs a summary + assertion table to the console and shows a UI notification.
+The module exports shared test utilities in `scripts/test-utils.js`:
 
-## UI Button
-
-A GM-only "Run BitD Alt Teeth Test" button (vial icon) is added to the Token controls.
+- `createTestActor({ name, playbookName })` - Create a character with playbook
+- `createTestCrewActor({ name, crewTypeName })` - Create a crew
+- `ensureSheet(actor)` - Open and wait for sheet to render
+- `cleanupTestActor(actor)` - Close sheet and delete actor
+- `closeAllDialogs()` - Clean up V1 and V2 dialogs
+- `waitForActorUpdate(actor)` - Wait for actor data to update
 
 ## Notes
 
-- This module depends on `bitd-alternate-sheets` and the Blades system.
-- It creates a temporary actor and uses the alternate sheet UI to drive tests.
+- Tests create temporary actors that are deleted after each test
+- Some tests may skip on V13 due to ApplicationV2 timing differences
+- Run in a dedicated test world to avoid affecting real game data
