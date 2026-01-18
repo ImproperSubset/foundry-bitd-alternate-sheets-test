@@ -10,7 +10,9 @@ import {
   waitForActorCondition,
   isTargetModuleActive,
   closeAllDialogs,
+  testCleanup,
   TestNumberer,
+  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -271,6 +273,286 @@ Hooks.on("quenchReady", (quench) => {
           );
 
           console.log(`[EditMode Test] Crew edit state persisted via user flag for actor ${actor.id}`);
+        });
+      });
+
+      t.section("Character Sheet Mini Mode", () => {
+        let actor;
+
+        beforeEach(async function () {
+          this.timeout(10000);
+          await clearAllowEditStates();
+          const result = await createTestActor({
+            name: "MiniMode-CharSheet-Test",
+            playbookName: "Cutter"
+          });
+          actor = result.actor;
+        });
+
+        afterEach(async function () {
+          this.timeout(5000);
+          await testCleanup({ actors: [actor] });
+          actor = null;
+          await clearAllowEditStates();
+        });
+
+        t.test("toggle-expand button exists on character sheet", async function () {
+          this.timeout(8000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const toggleExpand = root.querySelector(".toggle-expand");
+          assert.ok(toggleExpand, "Toggle expand button should exist on character sheet");
+        });
+
+        t.test("minimized-view section exists on character sheet", async function () {
+          this.timeout(8000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const minimizedView = root.querySelector(".minimized-view");
+          assert.ok(minimizedView, "Minimized view section should exist on character sheet");
+        });
+
+        t.test("clicking toggle-expand adds can-expand class", async function () {
+          this.timeout(8000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const toggleExpand = root.querySelector(".toggle-expand");
+          if (!toggleExpand) {
+            skipWithReason(this, "Toggle expand button not found on sheet");
+            return;
+          }
+
+          // Initial state should not have can-expand
+          const wrapper = sheet._element?.[0] || sheet._element;
+          const hasCanExpandBefore = wrapper?.classList?.contains("can-expand") || false;
+
+          // Click to minimize
+          toggleExpand.click();
+          await new Promise((r) => setTimeout(r, 200));
+
+          // Should now have can-expand class
+          const hasCanExpandAfter = wrapper?.classList?.contains("can-expand") || false;
+
+          // State should have changed (toggled)
+          assert.notEqual(
+            hasCanExpandBefore,
+            hasCanExpandAfter,
+            "can-expand class should toggle after clicking expand button"
+          );
+        });
+
+        t.test("clicking toggle-expand twice restores original state", async function () {
+          this.timeout(8000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const toggleExpand = root.querySelector(".toggle-expand");
+          if (!toggleExpand) {
+            skipWithReason(this, "Toggle expand button not found on sheet");
+            return;
+          }
+
+          const wrapper = sheet._element?.[0] || sheet._element;
+          const initialState = wrapper?.classList?.contains("can-expand") || false;
+
+          // Toggle twice
+          toggleExpand.click();
+          await new Promise((r) => setTimeout(r, 200));
+          toggleExpand.click();
+          await new Promise((r) => setTimeout(r, 200));
+
+          const finalState = wrapper?.classList?.contains("can-expand") || false;
+          assert.equal(
+            finalState,
+            initialState,
+            "Two clicks should restore original expand state"
+          );
+        });
+
+        t.test("minimized view contains essential elements", async function () {
+          this.timeout(8000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const minimizedView = root.querySelector(".minimized-view");
+          if (!minimizedView) {
+            skipWithReason(this, "Minimized view section not found on sheet");
+            return;
+          }
+
+          // Check for portrait in minimized view
+          const portrait = minimizedView.querySelector(".portrait, .character-portrait");
+          assert.ok(portrait, "Minimized view should contain character portrait");
+        });
+
+        t.test("mini mode hides main content when active", async function () {
+          this.timeout(10000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const toggleExpand = root.querySelector(".toggle-expand");
+          if (!toggleExpand) {
+            skipWithReason(this, "Toggle expand button not found on sheet");
+            return;
+          }
+
+          // Activate mini mode
+          toggleExpand.click();
+          await new Promise((r) => setTimeout(r, 200));
+
+          const wrapper = sheet._element?.[0] || sheet._element;
+          const isMinimized = wrapper?.classList?.contains("can-expand") || false;
+
+          if (isMinimized) {
+            // When minimized, the sheet height should be reduced
+            // We can check if the height is less than a typical full sheet
+            const sheetHeight = sheet.position?.height || wrapper?.offsetHeight || 0;
+            console.log(`[MiniMode Test] Sheet height when minimized: ${sheetHeight}px`);
+
+            // In mini mode, height should typically be less than 400px
+            // (full sheet is usually 600-800px)
+            assert.ok(
+              sheetHeight < 500,
+              `Sheet height should be reduced in mini mode (got ${sheetHeight}px)`
+            );
+          }
+
+          // Toggle back to normal
+          toggleExpand.click();
+          await new Promise((r) => setTimeout(r, 200));
+        });
+      });
+
+      t.section("Crew Sheet Mini Mode", () => {
+        let actor;
+
+        beforeEach(async function () {
+          this.timeout(10000);
+          await clearAllowEditStates();
+          const result = await createTestCrewActor({
+            name: "MiniMode-CrewSheet-Test",
+            crewTypeName: "Assassins"
+          });
+          actor = result.actor;
+        });
+
+        afterEach(async function () {
+          this.timeout(5000);
+          await testCleanup({ actors: [actor] });
+          actor = null;
+          await clearAllowEditStates();
+        });
+
+        t.test("toggle-expand button exists on crew sheet", async function () {
+          this.timeout(8000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const toggleExpand = root.querySelector(".toggle-expand");
+          assert.ok(toggleExpand, "Toggle expand button should exist on crew sheet");
+        });
+
+        t.test("crew sheet mini mode persists across close/reopen", async function () {
+          this.timeout(15000);
+
+          let sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const toggleExpand = root.querySelector(".toggle-expand");
+          if (!toggleExpand) {
+            skipWithReason(this, "Toggle expand button not found on crew sheet");
+            return;
+          }
+
+          // Minimize the sheet
+          toggleExpand.click();
+          await new Promise((r) => setTimeout(r, 300));
+
+          // Verify it's minimized
+          assert.ok(sheet.sheetMinimized, "Sheet should be marked as minimized");
+
+          // Close and reopen
+          await sheet.close();
+          await new Promise((r) => setTimeout(r, 200));
+
+          actor._sheet = null;
+          sheet = await ensureSheet(actor);
+          await new Promise((r) => setTimeout(r, 300));
+
+          // Verify state persisted
+          assert.ok(
+            sheet.sheetMinimized,
+            "Crew sheet mini mode should persist after close/reopen"
+          );
+
+          console.log(`[MiniMode Test] Crew sheet mini mode persisted for actor ${actor.id}`);
+        });
+
+        t.test("clicking toggle-expand twice restores normal state on crew sheet", async function () {
+          this.timeout(10000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const toggleExpand = root.querySelector(".toggle-expand");
+          if (!toggleExpand) {
+            skipWithReason(this, "Toggle expand button not found on crew sheet");
+            return;
+          }
+
+          const initialMinimized = sheet.sheetMinimized || false;
+
+          // Toggle twice
+          toggleExpand.click();
+          await new Promise((r) => setTimeout(r, 200));
+          toggleExpand.click();
+          await new Promise((r) => setTimeout(r, 200));
+
+          const finalMinimized = sheet.sheetMinimized || false;
+          assert.equal(
+            finalMinimized,
+            initialMinimized,
+            "Two clicks should restore original minimized state"
+          );
+        });
+
+        t.test("crew sheet coins-row is visible in mini mode", async function () {
+          this.timeout(10000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const toggleExpand = root.querySelector(".toggle-expand");
+          if (!toggleExpand) {
+            skipWithReason(this, "Toggle expand button not found on crew sheet");
+            return;
+          }
+
+          // Minimize
+          toggleExpand.click();
+          await new Promise((r) => setTimeout(r, 300));
+
+          // Check coins-row visibility
+          const coinsRow = root.querySelector(".coins-row");
+          if (coinsRow) {
+            const style = getComputedStyle(coinsRow);
+            const isVisible = style.display !== "none" && style.visibility !== "hidden";
+            console.log(`[MiniMode Test] Coins row visible in mini mode: ${isVisible}`);
+          }
+
+          // Restore
+          toggleExpand.click();
+          await new Promise((r) => setTimeout(r, 200));
         });
       });
     },

@@ -100,12 +100,23 @@ Hooks.on("quenchReady", (quench) => {
           await new Promise(r => setTimeout(r, 300));
           root = sheet.element?.[0] || sheet.element;
 
-          // The onerror should be escaped
-          const html = root.innerHTML;
-          assert.ok(
-            !html.includes('onerror="alert(1)"'),
-            "Event handlers should be escaped"
+          // XSS prevention: verify no actual img elements with onerror handlers exist
+          // The < and > should be escaped to &lt; and &gt;, preventing element creation
+          const dangerousImgs = root.querySelectorAll('img[onerror]');
+          assert.strictEqual(
+            dangerousImgs.length,
+            0,
+            "No img elements with onerror handlers should exist"
           );
+
+          // Also verify the < character is escaped in the alias display
+          const aliasSpan = root.querySelector('[data-target*="system.alias"].inline-input');
+          if (aliasSpan) {
+            assert.ok(
+              aliasSpan.innerHTML.includes('&lt;'),
+              "< character should be escaped to &lt;"
+            );
+          }
         });
       });
 
@@ -670,13 +681,24 @@ Hooks.on("quenchReady", (quench) => {
           await new Promise(r => setTimeout(r, 300));
 
           const updatedRoot = sheet.element?.[0] || sheet.element;
-          const html = updatedRoot.innerHTML;
 
-          // The onerror should be escaped
-          assert.ok(
-            !html.includes('onerror="alert(1)"'),
-            "inline-editable-text should escape event handlers"
+          // XSS prevention: verify no actual img elements with onerror handlers exist
+          // The < and > should be escaped to &lt; and &gt;, preventing element creation
+          const dangerousImgs = updatedRoot.querySelectorAll('img[onerror]');
+          assert.strictEqual(
+            dangerousImgs.length,
+            0,
+            "No img elements with onerror handlers should exist"
           );
+
+          // Also verify the < character is escaped in the inline-input
+          const aliasSpan = updatedRoot.querySelector('[data-target*="system.alias"].inline-input');
+          if (aliasSpan) {
+            assert.ok(
+              aliasSpan.innerHTML.includes('&lt;'),
+              "< character should be escaped to &lt;"
+            );
+          }
         });
 
         t.test("inline-editable-text shows placeholder when empty", async function () {

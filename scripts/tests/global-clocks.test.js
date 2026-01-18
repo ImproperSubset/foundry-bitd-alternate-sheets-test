@@ -15,6 +15,7 @@ import {
   waitForClockInChat,
   TestNumberer,
   assertExists,
+  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -182,8 +183,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // NOTE: Clock actor type depends on system configuration - legitimate skip if unavailable
           if (!clockActor) {
-            console.log("[GlobalClocks Test] Clock actor type not available");
-            this.skip(); // Legitimate: clock-actor-unavailable
+            skipWithReason(this, "Clock actor type not available in system");
             return;
           }
 
@@ -199,8 +199,7 @@ Hooks.on("quenchReady", (quench) => {
           clockActor = await createClockActor({ name: "Test Clock 4.1.1", type: 4, value: 2 });
 
           if (!clockActor) {
-            // Clock actor type not available in this system
-            this.skip();
+            skipWithReason(this, "Clock actor type not available in system");
             return;
           }
 
@@ -233,8 +232,7 @@ Hooks.on("quenchReady", (quench) => {
           clockActor = await createClockActor({ name: "Test Clock Snapshot", type: 4, value: 2 });
 
           if (!clockActor) {
-            console.log("[GlobalClocks Test] Clock actor creation failed");
-            this.skip();
+            skipWithReason(this, "Clock actor type not available in system");
             return;
           }
 
@@ -273,8 +271,7 @@ Hooks.on("quenchReady", (quench) => {
           clockActor = await createClockActor({ name: "Test Clock Snapshot Click", type: 4, value: 1 });
 
           if (!clockActor) {
-            console.log("[GlobalClocks Test] Clock actor creation failed");
-            this.skip();
+            skipWithReason(this, "Clock actor type not available in system");
             return;
           }
 
@@ -358,8 +355,7 @@ Hooks.on("quenchReady", (quench) => {
           // Create clock actor first
           clockActor = await createClockActor({ name: "Notes Tab Clock", type: 4, value: 1 });
           if (!clockActor) {
-            console.log("[GlobalClocks Test] Clock actor type not available");
-            this.skip();
+            skipWithReason(this, "Clock actor type not available in system");
             return;
           }
 
@@ -412,7 +408,7 @@ Hooks.on("quenchReady", (quench) => {
           // Create clock actor
           clockActor = await createClockActor({ name: "Notes Click Clock", type: 4, value: 1 });
           if (!clockActor) {
-            this.skip();
+            skipWithReason(this, "Clock actor type not available in system");
             return;
           }
 
@@ -442,8 +438,7 @@ Hooks.on("quenchReady", (quench) => {
           // Find the clock in Notes tab specifically
           const clockEl = root.querySelector('[data-tab="notes"] .blades-clock');
           if (!clockEl) {
-            console.log("[GlobalClocks Test] Clock not found in Notes tab for click test");
-            this.skip();
+            skipWithReason(this, "Clock enrichment not active in Notes tab");
             return;
           }
 
@@ -483,7 +478,7 @@ Hooks.on("quenchReady", (quench) => {
           // Create clock actor
           clockActor = await createClockActor({ name: "Crew Notes Clock", type: 6, value: 2 });
           if (!clockActor) {
-            this.skip();
+            skipWithReason(this, "Clock actor type not available in system");
             return;
           }
 
@@ -695,8 +690,7 @@ Hooks.on("quenchReady", (quench) => {
           // Create clock actor
           clockActor = await createClockActor({ name: "Journal Clock", type: 4, value: 1 });
           if (!clockActor) {
-            console.log("[GlobalClocks Test] Clock actor type not available");
-            this.skip();
+            skipWithReason(this, "Clock actor type not available in system");
             return;
           }
 
@@ -720,13 +714,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // NOTE: Journal sheet element may not be found in all Foundry versions - legitimate skip
           if (!root) {
-            console.log("[GlobalClocks Test] Could not find journal sheet element - V12/V13 differences");
-            console.log("[GlobalClocks Test] ui.windows count:", Object.keys(ui.windows).length);
-            // List all windows for debugging
-            for (const [id, app] of Object.entries(ui.windows)) {
-              console.log(`[GlobalClocks Test] Window ${id}: ${app.constructor.name}, doc=${app.document?.id}`);
-            }
-            this.skip(); // Legitimate: v13-only-api
+            skipWithReason(this, "Requires Foundry V13+ (DocumentSheetV2 API for journals)");
             return;
           }
 
@@ -761,7 +749,7 @@ Hooks.on("quenchReady", (quench) => {
           // Create clock actor
           clockActor = await createClockActor({ name: "Journal Click Clock", type: 4, value: 1 });
           if (!clockActor) {
-            this.skip();
+            skipWithReason(this, "Clock actor type not available in system");
             return;
           }
 
@@ -785,16 +773,14 @@ Hooks.on("quenchReady", (quench) => {
 
           // NOTE: Journal sheet element may not be found in all Foundry versions - legitimate skip
           if (!root) {
-            console.log("[GlobalClocks Test] Could not find journal sheet element for click test - V12/V13 differences");
-            this.skip(); // Legitimate: v13-only-api
+            skipWithReason(this, "Requires Foundry V13+ (DocumentSheetV2 API for journals)");
             return;
           }
 
           // Wait for clock enrichment (V13 async @UUID enrichment + replaceClockLinks)
           const clockEl = await waitForClockElement(root, { timeoutMs: 3000 });
           if (!clockEl) {
-            console.log("[GlobalClocks Test] Clock not found in journal for click test");
-            this.skip();
+            skipWithReason(this, "Clock enrichment not active in journals");
             return;
           }
 
@@ -834,7 +820,7 @@ Hooks.on("quenchReady", (quench) => {
           // Create clock at value 3
           clockActor = await createClockActor({ name: "Journal Decrement Clock", type: 4, value: 3 });
           if (!clockActor) {
-            this.skip();
+            skipWithReason(this, "Clock actor type not available in system");
             return;
           }
 
@@ -858,16 +844,14 @@ Hooks.on("quenchReady", (quench) => {
 
           // NOTE: Journal sheet element may not be found in all Foundry versions - legitimate skip
           if (!root) {
-            console.log("[GlobalClocks Test] Could not find journal sheet element for decrement test - V12/V13 differences");
-            this.skip(); // Legitimate: v13-only-api
+            skipWithReason(this, "Requires Foundry V13+ (DocumentSheetV2 API for journals)");
             return;
           }
 
           // Wait for clock enrichment (V13 async @UUID enrichment + replaceClockLinks)
           const clockEl = await waitForClockElement(root, { timeoutMs: 3000 });
           if (!clockEl) {
-            console.log("[GlobalClocks Test] Clock not found in journal for decrement test");
-            this.skip();
+            skipWithReason(this, "Clock enrichment not active in journals");
             return;
           }
 

@@ -12,6 +12,7 @@ import {
   expectedTestError,
   TestNumberer,
   assertExists,
+  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -195,8 +196,7 @@ Hooks.on("quenchReady", (quench) => {
           const inlineFields = findInlineEditFields(root);
 
           if (inlineFields.length === 0) {
-            // Legitimate: optional-feature - inline edit fields may not be present in all sheet configurations
-            this.skip();
+            skipWithReason(this, "Optional feature: inline edit fields not present in this sheet configuration");
             return;
           }
 
@@ -246,8 +246,7 @@ Hooks.on("quenchReady", (quench) => {
           const radioToggles = findRadioToggles(root);
 
           if (radioToggles.length === 0) {
-            // Legitimate: optional-feature - radio toggles may not be present in all sheet configurations
-            this.skip();
+            skipWithReason(this, "Optional feature: radio toggles not present in this sheet configuration");
             return;
           }
 
@@ -393,8 +392,7 @@ Hooks.on("quenchReady", (quench) => {
           const upgradeCheckboxes = findUpgradeCheckboxes(root);
 
           if (upgradeCheckboxes.length === 0) {
-            // Legitimate: crew-type-specific - some crew types may not have upgrade checkboxes
-            this.skip();
+            skipWithReason(this, "Crew-type-specific: upgrade checkboxes not present for this crew type");
             return;
           }
 
@@ -426,8 +424,7 @@ Hooks.on("quenchReady", (quench) => {
           const abilityCheckboxes = findAbilityCheckboxes(root);
 
           if (abilityCheckboxes.length === 0) {
-            // Legitimate: crew-type-specific - some crew types may not have ability checkboxes
-            this.skip();
+            skipWithReason(this, "Crew-type-specific: ability checkboxes not present for this crew type");
             return;
           }
 
