@@ -11,6 +11,7 @@ import {
   testCleanup,
   TestNumberer,
   assertExists,
+  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -212,20 +213,22 @@ Hooks.on("quenchReady", (quench) => {
           // Find a coin input with value "2" and click its label
           const coinLabel = fullView.querySelector('label[for*="coins"][for*="hands-2"]');
           if (!coinLabel) {
-            console.log("[SheetPopups Test] Coin label not found");
-            this.skip();
+            skipWithReason(this, "Coin label selector not found in popup DOM");
             return;
           }
 
           const initialCoins = actor.system.coins || 0;
-          coinLabel.click();
+          // radio-toggle controls use mousedown, not click
+          coinLabel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
 
           const newCoins = actor.system.coins;
-          assert.ok(
-            newCoins !== undefined,
-            "Coins should be set after clicking coin control"
+          // Assert the specific expected value - clicking hands-2 should set coins to 2
+          assert.equal(
+            newCoins,
+            2,
+            `Coins should be 2 after clicking hands-2 label (got ${newCoins})`
           );
           console.log(`[SheetPopups Test] Coins changed: ${initialCoins} -> ${newCoins}`);
         });
@@ -245,22 +248,235 @@ Hooks.on("quenchReady", (quench) => {
           // Find a stash input with value "5" and click its label
           const stashLabel = fullView.querySelector('label[for*="stashed-5"]');
           if (!stashLabel) {
-            console.log("[SheetPopups Test] Stash label not found");
-            this.skip();
+            skipWithReason(this, "Stash label selector not found in popup DOM");
             return;
           }
 
           const initialStash = actor.system.coins_stashed || 0;
-          stashLabel.click();
+          // radio-toggle controls use mousedown, not click
+          stashLabel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
 
           const newStash = actor.system.coins_stashed;
-          assert.ok(
-            newStash !== undefined,
-            "Stash should be set after clicking stash control"
+          // Assert the specific expected value - clicking stashed-5 should set stash to 5
+          assert.equal(
+            newStash,
+            5,
+            `Stash should be 5 after clicking stashed-5 label (got ${newStash})`
           );
           console.log(`[SheetPopups Test] Stash changed: ${initialStash} -> ${newStash}`);
+        });
+      });
+
+      t.section("Coins Persistence (Close/Reopen)", () => {
+        let actor;
+
+        beforeEach(async function () {
+          this.timeout(10000);
+          const result = await createTestActor({
+            name: "SheetPopups-CoinsPersist-Test",
+            playbookName: "Cutter"
+          });
+          actor = result.actor;
+        });
+
+        afterEach(async function () {
+          this.timeout(5000);
+          await testCleanup({ actors: [actor] });
+          actor = null;
+        });
+
+        t.test("coins value persists after closing and reopening popup", async function () {
+          this.timeout(15000);
+
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          let coinsBox = findCoinsBox(root);
+          assertExists(assert, coinsBox, "Coins box should exist");
+
+          // Open popup
+          coinsBox.click();
+          await new Promise(r => setTimeout(r, 100));
+          assert.ok(isPopupOpen(coinsBox), "Popup should be open");
+
+          const fullView = coinsBox.querySelector(".full-view");
+
+          // Set coins to a specific value (click label for value 3)
+          const coinLabel = fullView.querySelector('label[for*="coins"][for*="hands-3"]');
+          if (!coinLabel) {
+            skipWithReason(this, "Coin label for value 3 not found in popup");
+            return;
+          }
+
+          // radio-toggle controls use mousedown, not click
+          coinLabel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise(r => setTimeout(r, 300));
+
+          const setCoins = actor.system.coins;
+          // Assert the click actually worked before testing persistence
+          assert.equal(setCoins, 3, `Coins should be 3 after clicking hands-3 (got ${setCoins})`);
+          console.log(`[SheetPopups Test] Coins set to: ${setCoins}`);
+
+          // Close popup by clicking the collapsed area
+          coinsBox.click();
+          await new Promise(r => setTimeout(r, 100));
+
+          // Re-render sheet to simulate real usage
+          await sheet.render(true);
+          await new Promise(r => setTimeout(r, 300));
+          root = sheet.element?.[0] || sheet.element;
+          coinsBox = findCoinsBox(root);
+
+          // Reopen popup
+          coinsBox.click();
+          await new Promise(r => setTimeout(r, 100));
+
+          // Verify coins value is still the same
+          const afterReopenCoins = actor.system.coins;
+          assert.equal(
+            afterReopenCoins,
+            setCoins,
+            `Coins should persist after close/reopen (expected ${setCoins}, got ${afterReopenCoins})`
+          );
+        });
+
+        t.test("stash value persists after closing and reopening popup", async function () {
+          this.timeout(15000);
+
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          let coinsBox = findCoinsBox(root);
+          coinsBox.click();
+          await new Promise(r => setTimeout(r, 100));
+
+          const fullView = coinsBox.querySelector(".full-view");
+
+          // Set stash to a specific value
+          const stashLabel = fullView.querySelector('label[for*="stashed-10"]');
+          if (!stashLabel) {
+            skipWithReason(this, "Stash label for value 10 not found in popup");
+            return;
+          }
+
+          // radio-toggle controls use mousedown, not click
+          stashLabel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise(r => setTimeout(r, 300));
+
+          const setStash = actor.system.coins_stashed;
+          // Assert the click actually worked before testing persistence
+          assert.equal(setStash, 10, `Stash should be 10 after clicking stashed-10 (got ${setStash})`);
+          console.log(`[SheetPopups Test] Stash set to: ${setStash}`);
+
+          // Close and reopen
+          coinsBox.click();
+          await sheet.render(true);
+          await new Promise(r => setTimeout(r, 300));
+          root = sheet.element?.[0] || sheet.element;
+          coinsBox = findCoinsBox(root);
+          coinsBox.click();
+          await new Promise(r => setTimeout(r, 100));
+
+          // Verify stash value persists
+          const afterReopenStash = actor.system.coins_stashed;
+          assert.equal(
+            afterReopenStash,
+            setStash,
+            `Stash should persist after close/reopen (expected ${setStash}, got ${afterReopenStash})`
+          );
+        });
+
+        t.test("all coin denominations (1-4) can be set", async function () {
+          this.timeout(20000);
+
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          for (const value of [1, 2, 3, 4]) {
+            let coinsBox = findCoinsBox(root);
+            coinsBox.click();
+            await new Promise(r => setTimeout(r, 100));
+
+            const fullView = coinsBox.querySelector(".full-view");
+            const coinLabel = fullView.querySelector(`label[for*="coins"][for*="hands-${value}"]`);
+
+            if (!coinLabel) {
+              console.log(`[SheetPopups Test] Coin label for value ${value} not found`);
+              continue;
+            }
+
+            // radio-toggle controls use mousedown, not click
+            coinLabel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+            await waitForActorUpdate(actor, { timeoutMs: 1500 }).catch(() => {});
+            await new Promise(r => setTimeout(r, 200));
+
+            // Close popup
+            coinsBox.click();
+            await new Promise(r => setTimeout(r, 100));
+
+            // Verify value was actually set - hard assertion
+            const currentCoins = actor.system.coins;
+            assert.equal(
+              currentCoins,
+              value,
+              `Coins should be ${value} after clicking hands-${value} (got ${currentCoins})`
+            );
+            console.log(`[SheetPopups Test] Set coins to ${value}, verified: ${currentCoins}`);
+
+            // Re-render for next iteration
+            await sheet.render(true);
+            await new Promise(r => setTimeout(r, 200));
+            root = sheet.element?.[0] || sheet.element;
+          }
+        });
+
+        t.test("stash increments correctly with multiple clicks", async function () {
+          this.timeout(15000);
+
+          // Reset stash to 0
+          await actor.update({ "system.coins_stashed": 0 });
+          await new Promise(r => setTimeout(r, 200));
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const coinsBox = findCoinsBox(root);
+          coinsBox.click();
+          await new Promise(r => setTimeout(r, 100));
+
+          const fullView = coinsBox.querySelector(".full-view");
+
+          // Click stash value 5
+          const stashLabel5 = fullView.querySelector('label[for*="stashed-5"]');
+          if (!stashLabel5) {
+            skipWithReason(this, "Stash label for value 5 not found");
+            return;
+          }
+
+          // radio-toggle controls use mousedown, not click
+          stashLabel5.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise(r => setTimeout(r, 300));
+
+          const after5 = actor.system.coins_stashed;
+          assert.equal(after5, 5, `Stash should be 5 (got ${after5})`);
+
+          // Click stash value 10 - radio-toggle uses mousedown
+          const stashLabel10 = fullView.querySelector('label[for*="stashed-10"]');
+          if (stashLabel10) {
+            stashLabel10.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+            await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+            await new Promise(r => setTimeout(r, 300));
+
+            const after10 = actor.system.coins_stashed;
+            assert.equal(after10, 10, `Stash should be 10 (got ${after10})`);
+          }
+
+          console.log(`[SheetPopups Test] Stash progression: 0 -> ${after5} -> ${actor.system.coins_stashed}`);
         });
       });
 
@@ -373,8 +589,7 @@ Hooks.on("quenchReady", (quench) => {
           const lightHarmInput = fullView.querySelector('input[name="system.harm.light.one"]');
 
           if (!lightHarmInput) {
-            console.log("[SheetPopups Test] Light harm input not found");
-            this.skip();
+            skipWithReason(this, "Light harm input selector not found in popup DOM");
             return;
           }
 
@@ -403,8 +618,7 @@ Hooks.on("quenchReady", (quench) => {
           const armorCheckbox = fullView.querySelector('input[name="system.armor-uses.armor"]');
 
           if (!armorCheckbox) {
-            console.log("[SheetPopups Test] Armor checkbox not found");
-            this.skip();
+            skipWithReason(this, "Armor checkbox selector not found in popup DOM");
             return;
           }
 
@@ -489,8 +703,7 @@ Hooks.on("quenchReady", (quench) => {
           const loadSelector = fullView.querySelector('select[name="system.selected_load_level"]');
 
           if (!loadSelector) {
-            console.log("[SheetPopups Test] Load selector not found");
-            this.skip();
+            skipWithReason(this, "Load selector not found in popup DOM");
             return;
           }
 
@@ -515,8 +728,7 @@ Hooks.on("quenchReady", (quench) => {
           const loadSelector = fullView.querySelector('select[name="system.selected_load_level"]');
 
           if (!loadSelector) {
-            console.log("[SheetPopups Test] Load selector not found");
-            this.skip();
+            skipWithReason(this, "Load selector not found in popup DOM");
             return;
           }
 
@@ -527,8 +739,7 @@ Hooks.on("quenchReady", (quench) => {
           const differentOption = options.find(opt => opt.value !== initialValue);
 
           if (!differentOption) {
-            console.log("[SheetPopups Test] Only one load option available");
-            this.skip();
+            skipWithReason(this, "Only one load option available in selector");
             return;
           }
 
@@ -569,10 +780,23 @@ Hooks.on("quenchReady", (quench) => {
           this.timeout(8000);
 
           const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
+          let root = sheet.element?.[0] || sheet.element;
+
+          // clearLoad button is only visible in debug mode (GM only)
+          const debugToggle = root.querySelector(".debug-toggle");
+          if (!debugToggle) {
+            skipWithReason(this, "Debug toggle not found - requires GM permissions");
+            return;
+          }
+
+          // Enable debug mode
+          debugToggle.click();
+          await sheet.render(true);
+          await new Promise(r => setTimeout(r, 300));
+          root = sheet.element?.[0] || sheet.element;
 
           const clearLoadButton = root.querySelector("button.clearLoad");
-          assert.ok(clearLoadButton, "Clear load button should exist on character sheet");
+          assert.ok(clearLoadButton, "Clear load button should exist on character sheet (in debug mode)");
         });
 
         t.test("clearLoad resets all equipped items", async function () {
@@ -580,6 +804,19 @@ Hooks.on("quenchReady", (quench) => {
 
           const sheet = await ensureSheet(actor);
           let root = sheet.element?.[0] || sheet.element;
+
+          // clearLoad button is only visible in debug mode (GM only)
+          const debugToggle = root.querySelector(".debug-toggle");
+          if (!debugToggle) {
+            skipWithReason(this, "Debug toggle not found - requires GM permissions");
+            return;
+          }
+
+          // Enable debug mode
+          debugToggle.click();
+          await sheet.render(true);
+          await new Promise(r => setTimeout(r, 300));
+          root = sheet.element?.[0] || sheet.element;
 
           // Enable edit mode
           const editToggle = root.querySelector(".toggle-allow-edit");
@@ -605,8 +842,7 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           if (equippedCount === 0) {
-            console.log("[SheetPopups Test] No items to equip");
-            this.skip();
+            skipWithReason(this, "No equippable gear items found on sheet");
             return;
           }
 
@@ -647,19 +883,24 @@ Hooks.on("quenchReady", (quench) => {
           await new Promise(r => setTimeout(r, 200));
 
           const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
+          let root = sheet.element?.[0] || sheet.element;
 
           // Verify no items equipped
           let equipped = getEquippedItems(actor);
           assert.equal(Object.keys(equipped).length, 0, "Should have no equipped items initially");
 
+          // clearLoad button is only visible in debug mode - enable it
+          const debugToggle = root.querySelector(".debug-toggle");
+          assertExists(assert, debugToggle, "Debug toggle should exist");
+
+          debugToggle.click();
+          await sheet.render(true);
+          await new Promise(r => setTimeout(r, 300));
+          root = sheet.element?.[0] || sheet.element;
+
           // Click clear load - should not throw
           const clearLoadButton = root.querySelector("button.clearLoad");
-          if (!clearLoadButton) {
-            console.log("[SheetPopups Test] Clear load button not found");
-            this.skip();
-            return;
-          }
+          assertExists(assert, clearLoadButton, "Clear load button should exist in debug mode");
 
           let errorThrown = false;
           try {

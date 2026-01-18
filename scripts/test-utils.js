@@ -6,6 +6,55 @@
 const TARGET_MODULE_ID = "bitd-alternate-sheets";
 
 // ============================================================================
+// Test Data Patterns
+// ============================================================================
+
+/**
+ * Common XSS payloads for security testing.
+ * Use these to verify that user input is properly sanitized.
+ */
+export const COMMON_XSS_PAYLOADS = [
+  // Basic script injection
+  '<script>alert("XSS")</script>',
+  // Event handlers
+  '<img src=x onerror="alert(\'XSS\')">',
+  '<svg onload="alert(\'XSS\')">',
+  // JavaScript protocol
+  'javascript:alert("XSS")',
+  // Data URL
+  'data:text/html,<script>alert("XSS")</script>',
+  // Encoded variants
+  '&lt;script&gt;alert("XSS")&lt;/script&gt;',
+  // Breaking out of attributes
+  '" onclick="alert(\'XSS\')" data-x="',
+  // Template literal injection
+  '${alert("XSS")}',
+  // Unicode encoding
+  '\u003cscript\u003ealert("XSS")\u003c/script\u003e',
+  // HTML entity encoding
+  '&#60;script&#62;alert("XSS")&#60;/script&#62;',
+  // Nested/obfuscated
+  '<scr<script>ipt>alert("XSS")</scr</script>ipt>',
+  // Style-based
+  '<style>body{background:url("javascript:alert(\'XSS\')")}</style>',
+];
+
+/**
+ * Standard test ability data template.
+ * Override any fields as needed.
+ */
+const DEFAULT_ABILITY_DATA = {
+  name: "Test Ability",
+  type: "ability",
+  system: {
+    description: "A test ability for automated testing",
+    purchased: false,
+    class: "",
+    class_default: false,
+  },
+};
+
+// ============================================================================
 // Auto-Numbering Test Helper
 // ============================================================================
 
@@ -246,6 +295,38 @@ export function isLegitimateSkip(reason) {
     "clock-actor-unavailable" // Clock actor type not in system
   ];
   return legitimateReasons.includes(reason);
+}
+
+/**
+ * Skip a test with a standardized console warning message.
+ * Use this instead of raw `this.skip()` to ensure all skips are visible and documented.
+ *
+ * IMPORTANT: Only use for version-dependent features (V12 vs V13 API differences).
+ * Tests should only depend on guaranteed available resources.
+ *
+ * @param {Mocha.Context} context - The Mocha test context (`this` in test function)
+ * @param {string} reason - Human-readable reason for the skip
+ * @param {string} [testName] - Optional test name for logging (uses context title if available)
+ *
+ * @example
+ * // In a test function:
+ * t.test("journal clock renders interactively", async function () {
+ *   const root = await getJournalSheetElement(journal);
+ *   if (!root) {
+ *     skipWithReason(this, "Requires Foundry V13+ (DocumentSheetV2 API)");
+ *     return;
+ *   }
+ *   // ... rest of test
+ * });
+ *
+ * @example
+ * // With custom test name:
+ * skipWithReason(this, "Clock actor type not available in system", "clock creation test");
+ */
+export function skipWithReason(context, reason, testName = null) {
+  const name = testName || context?.test?.title || "Unknown test";
+  console.warn(`[SKIP] ${name}: ${reason}`);
+  context.skip();
 }
 
 // ============================================================================
@@ -641,6 +722,94 @@ export async function createTestActor({ name, playbookName } = {}) {
   await sheet.switchPlaybook(createdPlaybook);
   await new Promise((resolve) => setTimeout(resolve, 200));
   return { actor, playbookItem: createdPlaybook };
+}
+
+/**
+ * Create a test ability item on an actor.
+ * @param {object} options - Options
+ * @param {Actor} options.actor - The actor to add the ability to
+ * @param {object} options.overrides - Data overrides for the ability
+ * @returns {Promise<Item>} - The created ability item
+ *
+ * @example
+ * // Create a basic ability
+ * const ability = await createTestAbility({ actor });
+ *
+ * @example
+ * // Create a purchased class default ability
+ * const ability = await createTestAbility({
+ *   actor,
+ *   overrides: {
+ *     name: "Battleborn",
+ *     system: { purchased: true, class: "Cutter", class_default: true }
+ *   }
+ * });
+ */
+export async function createTestAbility({ actor, overrides = {} } = {}) {
+  if (!actor) {
+    throw new Error("Actor is required to create a test ability");
+  }
+
+  // Deep merge overrides with default data
+  const abilityData = foundry.utils.mergeObject(
+    foundry.utils.deepClone(DEFAULT_ABILITY_DATA),
+    overrides,
+    { inplace: false }
+  );
+
+  // Ensure unique name if not overridden
+  if (abilityData.name === DEFAULT_ABILITY_DATA.name) {
+    abilityData.name = `Test Ability ${Date.now()}`;
+  }
+
+  const [createdAbility] = await actor.createEmbeddedDocuments("Item", [abilityData]);
+  if (!createdAbility) {
+    throw new Error("Failed to create test ability");
+  }
+
+  return createdAbility;
+}
+
+/**
+ * Create multiple test abilities on an actor.
+ * @param {object} options - Options
+ * @param {Actor} options.actor - The actor to add abilities to
+ * @param {Array<object>} options.abilities - Array of override objects for each ability
+ * @returns {Promise<Item[]>} - The created ability items
+ *
+ * @example
+ * const abilities = await createTestAbilities({
+ *   actor,
+ *   abilities: [
+ *     { name: "Ability 1", system: { purchased: true } },
+ *     { name: "Ability 2", system: { purchased: false } },
+ *   ]
+ * });
+ */
+export async function createTestAbilities({ actor, abilities = [] } = {}) {
+  if (!actor) {
+    throw new Error("Actor is required to create test abilities");
+  }
+
+  const abilityDataArray = abilities.map((overrides, index) => {
+    const data = foundry.utils.mergeObject(
+      foundry.utils.deepClone(DEFAULT_ABILITY_DATA),
+      overrides,
+      { inplace: false }
+    );
+    // Ensure unique names
+    if (data.name === DEFAULT_ABILITY_DATA.name) {
+      data.name = `Test Ability ${Date.now()}-${index}`;
+    }
+    return data;
+  });
+
+  const createdAbilities = await actor.createEmbeddedDocuments("Item", abilityDataArray);
+  if (!createdAbilities || createdAbilities.length !== abilities.length) {
+    throw new Error("Failed to create some test abilities");
+  }
+
+  return createdAbilities;
 }
 
 /**

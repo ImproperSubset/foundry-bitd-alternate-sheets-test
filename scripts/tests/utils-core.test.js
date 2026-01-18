@@ -12,6 +12,7 @@ import {
   findClassItem,
   testCleanup,
   TestNumberer,
+  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -196,8 +197,7 @@ Hooks.on("quenchReady", (quench) => {
 
           const gearItems = findGearItems(root);
           if (gearItems.length === 0) {
-            console.log("[Utils-Core Test] No gear items found");
-            this.skip();
+            skipWithReason(this, "No gear items found on sheet");
             return;
           }
 
@@ -216,8 +216,7 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           if (!targetItem || !targetCheckbox) {
-            console.log("[Utils-Core Test] All items already equipped");
-            this.skip();
+            skipWithReason(this, "All items already equipped");
             return;
           }
 
@@ -254,8 +253,7 @@ Hooks.on("quenchReady", (quench) => {
 
           const gearItems = findGearItems(root);
           if (gearItems.length === 0) {
-            console.log("[Utils-Core Test] No gear items found");
-            this.skip();
+            skipWithReason(this, "No gear items found on sheet");
             return;
           }
 
@@ -311,8 +309,7 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           if (!targetCheckbox || !itemId) {
-            console.log("[Utils-Core Test] Could not set up equipped item for unequip test");
-            this.skip();
+            skipWithReason(this, "Could not set up equipped item for unequip test");
             return;
           }
 
@@ -364,8 +361,7 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           if (!targetCheckbox) {
-            console.log("[Utils-Core Test] No unequipped item found");
-            this.skip();
+            skipWithReason(this, "No unequipped item found");
             return;
           }
 
@@ -406,16 +402,30 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         t.test("Cutter has Skirmish starting skill", async function () {
-          this.timeout(8000);
+          this.timeout(12000);
 
           // Cutter playbook gives Skirmish 2, Command 1
+          // Explicitly call switchPlaybook to ensure getStartingAttributes is exercised
+          const cutter = await findClassItem("Cutter");
+          if (!cutter) {
+            console.log("[Utils-Core Test] Cutter playbook not found");
+            this.skip();
+            return;
+          }
+
+          const sheet = await ensureSheet(actor);
+          await sheet.switchPlaybook(cutter);
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise(r => setTimeout(r, 500));
+
           const attributes = actor.system.attributes;
           const skirmishValue = parseInt(attributes?.prowess?.skills?.skirmish?.value) || 0;
 
-          // After playbook application, Cutter should have Skirmish
-          assert.ok(
-            skirmishValue >= 1,
-            `Cutter should have Skirmish skill value >= 1 (got ${skirmishValue})`
+          // Cutter's starting Skirmish is 2
+          assert.equal(
+            skirmishValue,
+            2,
+            `Cutter should have Skirmish skill value of 2 (got ${skirmishValue})`
           );
         });
 
@@ -473,22 +483,31 @@ Hooks.on("quenchReady", (quench) => {
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 500));
 
-          // Skills should be reset to playbook defaults
+          // Skills should be reset to playbook defaults (Cutter's Skirmish is 2)
           attributes = actor.system.attributes;
           const skirmishAfter = parseInt(attributes?.prowess?.skills?.skirmish?.value) || 0;
 
-          assert.ok(
-            skirmishAfter < 5,
-            `Skirmish should be reset to playbook default after switch (was 5, now ${skirmishAfter})`
+          assert.equal(
+            skirmishAfter,
+            2,
+            `Skirmish should be reset to Cutter's starting value of 2 (was 5, now ${skirmishAfter})`
           );
         });
       });
 
       t.section("getVirtualListOfItems", () => {
         let actor;
+        let originalPopulateFromCompendia;
 
         beforeEach(async function () {
           this.timeout(10000);
+
+          // Store original setting and ensure compendium population is enabled
+          originalPopulateFromCompendia = game.settings.get(TARGET_MODULE_ID, "populateFromCompendia");
+          if (!originalPopulateFromCompendia) {
+            await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", true);
+          }
+
           const result = await createTestActor({
             name: "Utils-VirtualList-Test",
             playbookName: "Cutter"
@@ -500,6 +519,11 @@ Hooks.on("quenchReady", (quench) => {
           this.timeout(5000);
           await testCleanup({ actors: [actor] });
           actor = null;
+
+          // Restore original setting
+          if (originalPopulateFromCompendia !== undefined) {
+            await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", originalPopulateFromCompendia);
+          }
         });
 
         t.test("sheet displays abilities filtered by playbook class", async function () {
@@ -536,20 +560,18 @@ Hooks.on("quenchReady", (quench) => {
         t.test("owned abilities appear on sheet", async function () {
           this.timeout(12000);
 
-          // Get an ability from compendiums
           const sheet = await ensureSheet(actor);
           let root = sheet.element?.[0] || sheet.element;
 
-          // Find ability checkboxes
+          // Find ability checkboxes - guaranteed to exist with populateFromCompendia=true
           const abilityCheckboxes = root.querySelectorAll(
             ".ability-block input[type='checkbox'], .ability-checkbox"
           );
 
-          if (abilityCheckboxes.length === 0) {
-            console.log("[Utils-Core Test] No ability checkboxes found");
-            this.skip();
-            return;
-          }
+          assert.ok(
+            abilityCheckboxes.length > 0,
+            "Ability checkboxes should exist (populateFromCompendia is enabled)"
+          );
 
           // Enable edit mode
           const editToggle = root.querySelector(".toggle-allow-edit");
@@ -570,11 +592,10 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
-          if (!ownedAbilityName) {
-            console.log("[Utils-Core Test] All abilities already owned or no unowned found");
-            this.skip();
-            return;
-          }
+          assert.ok(
+            ownedAbilityName,
+            "Should find an unowned ability to click"
+          );
 
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
@@ -607,9 +628,14 @@ Hooks.on("quenchReady", (quench) => {
             await new Promise(r => setTimeout(r, 100));
           }
 
-          // Find and click an ability to own it
+          // Find and click an ability to own it - guaranteed to exist with populateFromCompendia=true
           const abilityCheckboxes = root.querySelectorAll(
             ".ability-block input[type='checkbox'], .ability-checkbox"
+          );
+
+          assert.ok(
+            abilityCheckboxes.length > 0,
+            "Ability checkboxes should exist (populateFromCompendia is enabled)"
           );
 
           let clickedAbilityName = null;
@@ -622,11 +648,10 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
-          if (!clickedAbilityName) {
-            console.log("[Utils-Core Test] No unowned ability found for duplicate test");
-            this.skip();
-            return;
-          }
+          assert.ok(
+            clickedAbilityName,
+            "Should find an unowned ability to click (fresh actor should have no purchased abilities)"
+          );
 
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
