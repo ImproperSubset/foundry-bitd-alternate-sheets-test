@@ -25,6 +25,11 @@
  * - bitd-alternate-sheets.migration: Data migration for ability progress, equipped items, legacy fields
  * - bitd-alternate-sheets.settings: Settings registration and cache invalidation
  * - bitd-alternate-sheets.crew-link: Crew linking via character sheet, cancel/clear behavior, locked mode
+ * - bitd-alternate-sheets.playbook-switching: Playbook switch flow, ability progress, acquaintances, attributes
+ * - bitd-alternate-sheets.utils-core: Core Utils functions (toggleOwnership, ability progress, starting attributes)
+ * - bitd-alternate-sheets.sheet-popups: Coins, harm, and load popup interactions
+ * - bitd-alternate-sheets.hooks: Hook handlers (cache invalidation, clock snapshots, item deletion cleanup)
+ * - bitd-alternate-sheets.handlebars: Handlebars helpers (XSS prevention, value display, costs, comparisons)
  */
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -109,6 +114,11 @@ Hooks.once("ready", () => {
   console.log(`  quench.runBatches("bitd-alternate-sheets.migration")`);
   console.log(`  quench.runBatches("bitd-alternate-sheets.settings")`);
   console.log(`  quench.runBatches("bitd-alternate-sheets.crew-link")`);
+  console.log(`  quench.runBatches("bitd-alternate-sheets.playbook-switching")`);
+  console.log(`  quench.runBatches("bitd-alternate-sheets.utils-core")`);
+  console.log(`  quench.runBatches("bitd-alternate-sheets.sheet-popups")`);
+  console.log(`  quench.runBatches("bitd-alternate-sheets.hooks")`);
+  console.log(`  quench.runBatches("bitd-alternate-sheets.handlebars")`);
   console.log(`  game.modules.get("${MODULE_ID}").api.runAllTests()`);
 });
 

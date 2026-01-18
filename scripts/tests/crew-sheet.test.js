@@ -570,6 +570,212 @@ Hooks.on("quenchReady", (quench) => {
         });
       });
 
+      t.section("Turf Selection", () => {
+        t.test("turf checkbox toggles turf ownership", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode to interact with turfs
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Find an unchecked turf checkbox
+          const turfCheckboxes = root.querySelectorAll(".turf-select:not(:checked)");
+
+          // NOTE: Turf availability depends on crew type - legitimate skip if none
+          if (turfCheckboxes.length === 0) {
+            console.log("[CrewSheet Test] No unchecked turf checkboxes found");
+            this.skip();
+            return;
+          }
+
+          const turfCheckbox = turfCheckboxes[0];
+          const turfId = turfCheckbox.dataset.turfId;
+
+          // Click to check the turf
+          turfCheckbox.checked = true;
+          turfCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Find the crew_type item to verify turf state
+          const crewTypeItem = actor.items.find((i) => i.type === "crew_type");
+          if (!crewTypeItem) {
+            console.log("[CrewSheet Test] No crew_type item found");
+            this.skip();
+            return;
+          }
+
+          // Verify turf is now selected
+          const turfValue = crewTypeItem.system?.turfs?.[turfId]?.value;
+          assert.ok(turfValue === true, `Turf ${turfId} should be selected after checking`);
+        });
+
+        t.test("turf selection persists across sheet close/reopen", async function () {
+          this.timeout(12000);
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Find an unchecked turf checkbox
+          const turfCheckboxes = root.querySelectorAll(".turf-select:not(:checked)");
+
+          // NOTE: Turf availability depends on crew type - legitimate skip if none
+          if (turfCheckboxes.length === 0) {
+            console.log("[CrewSheet Test] No unchecked turf checkboxes found");
+            this.skip();
+            return;
+          }
+
+          const turfCheckbox = turfCheckboxes[0];
+          const turfId = turfCheckbox.dataset.turfId;
+
+          // Click to check the turf
+          turfCheckbox.checked = true;
+          turfCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Close the sheet
+          await sheet.close();
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Reopen the sheet
+          const reopenedSheet = await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          root = reopenedSheet.element?.[0] || reopenedSheet.element;
+
+          // Find the same turf checkbox and verify it's checked
+          const persistedCheckbox = root.querySelector(`.turf-select[data-turf-id="${turfId}"]`);
+          assert.ok(persistedCheckbox, `Turf checkbox ${turfId} should exist after reopen`);
+          assert.ok(persistedCheckbox.checked, `Turf ${turfId} should remain selected after sheet close/reopen`);
+        });
+      });
+
+      t.section("Crew Inline Edits", () => {
+        t.test("editing crew name persists to actor", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Find the inline-input span for the name
+          const nameInput = root.querySelector(".identity-name .inline-input");
+
+          if (!nameInput) {
+            console.log("[CrewSheet Test] No inline name input found");
+            this.skip();
+            return;
+          }
+
+          // Edit the name
+          const newName = "Test Crew Name Edit";
+          nameInput.textContent = newName;
+          nameInput.dispatchEvent(new Event("blur", { bubbles: true }));
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Verify actor name was updated
+          assert.equal(actor.name, newName, "Actor name should be updated after inline edit");
+        });
+
+        t.test("editing lair field persists to actor", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Find the inline-input span for lair
+          const lairInput = root.querySelector("[data-target*='system.lair'], .meta-value .inline-input");
+
+          if (!lairInput) {
+            console.log("[CrewSheet Test] No inline lair input found");
+            this.skip();
+            return;
+          }
+
+          // Edit the lair
+          const newLair = "Secret Underground Base";
+          lairInput.textContent = newLair;
+          lairInput.dispatchEvent(new Event("blur", { bubbles: true }));
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Verify lair was updated
+          assert.equal(actor.system.lair, newLair, "Lair should be updated after inline edit");
+        });
+
+        t.test("inline edit changes persist across sheet close/reopen", async function () {
+          this.timeout(12000);
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          // Enable edit mode
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Find the inline-input span for the name
+          const nameInput = root.querySelector(".identity-name .inline-input");
+
+          if (!nameInput) {
+            console.log("[CrewSheet Test] No inline name input found");
+            this.skip();
+            return;
+          }
+
+          // Edit the name
+          const newName = "Persistent Crew Name";
+          nameInput.textContent = newName;
+          nameInput.dispatchEvent(new Event("blur", { bubbles: true }));
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Close the sheet
+          await sheet.close();
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          // Reopen the sheet
+          const reopenedSheet = await ensureSheet(actor);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          root = reopenedSheet.element?.[0] || reopenedSheet.element;
+
+          // Verify name persisted
+          assert.equal(actor.name, newName, "Crew name should persist after sheet close/reopen");
+
+          // Verify it displays in the reopened sheet
+          const displayedName = root.querySelector(".identity-name");
+          assert.ok(
+            displayedName?.textContent?.includes(newName),
+            "Crew name should display correctly after reopen"
+          );
+        });
+      });
+
       t.section("Crew Upgrade Rollback", () => {
         t.test("unchecking single-cost upgrade removes owned item", async function () {
           this.timeout(10000);

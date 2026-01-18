@@ -54,6 +54,11 @@
     "scripts/tests/binary-checkboxes.test.js",
     "scripts/tests/migration.test.js",
     "scripts/tests/settings.test.js",
-    "scripts/tests/crew-link.test.js"
+    "scripts/tests/crew-link.test.js",
+    "scripts/tests/playbook-switching.test.js",
+    "scripts/tests/utils-core.test.js",
+    "scripts/tests/sheet-popups.test.js",
+    "scripts/tests/hooks-integration.test.js",
+    "scripts/tests/handlebars-helpers.test.js"
   ]
 }
