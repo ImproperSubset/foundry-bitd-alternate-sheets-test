@@ -491,7 +491,7 @@ Hooks.on("quenchReady", (quench) => {
           console.log(`[NPC Test] Vice purveyor displays: "${displayText}"`);
         });
 
-        t.test("no Vice Purveyor NPCs → text input fallback dialog", async function () {
+        t.test("no Vice Purveyor NPCs → custom text entry in dialog", async function () {
           this.timeout(15000);
 
           // Ensure NO NPCs with associated_class="Vice Purveyor" exist
@@ -519,33 +519,24 @@ Hooks.on("quenchReady", (quench) => {
 
           // From here on, a dialog might be open - use try/finally to ensure cleanup
           try {
-            // Should get a text input dialog, NOT a card selection dialog
-            const textDialog = findTextInputDialog();
-            const cardDialog = findSelectionDialog();
+            // With the combined dialog, we always get a card selection dialog
+            // that includes a text input field for custom values
+            const dialog = findSelectionDialog();
+            assert.ok(dialog, "Selection dialog should open");
 
-            // If we got a card selection dialog (even with 0 choices), that's unexpected
-            // This means there are Vice Purveyor NPCs in the world, which shouldn't happen
-            if (cardDialog && isCardSelectionDialog(cardDialog)) {
-              const choices = getDialogChoices(cardDialog);
-              assert.fail(
-                `Expected text input dialog but got card selection dialog with ${choices.length} choices. ` +
-                `Ensure no Vice Purveyor NPCs exist in the world for this test.`
-              );
-            }
-
-            // Verify we got a text input dialog
-            const dialog = textDialog;
-            assert.ok(dialog, "Text input dialog should open when no Vice Purveyor NPCs exist");
-
-            assert.ok(
-              isTextInputDialog(dialog),
-              "When no Vice Purveyor NPCs exist, should show text input dialog"
+            // Verify there are no NPC choices (cards) in the dialog
+            const choices = getDialogChoices(dialog);
+            assert.strictEqual(
+              choices.length,
+              0,
+              "Dialog should have no NPC choices when no Vice Purveyor NPCs exist"
             );
 
-            // Enter a custom value
-            const textInput = dialog.querySelector('input[type="text"][name="value"]');
-            assert.ok(textInput, "Text input should exist in text input dialog");
+            // The dialog should have a text input for custom values
+            const textInput = dialog.querySelector('input[type="text"].custom-text-input');
+            assert.ok(textInput, "Custom text input should exist in dialog");
 
+            // Enter a custom value
             const customValue = "Custom Vice Purveyor Name";
             textInput.value = customValue;
             textInput.dispatchEvent(new Event("input", { bubbles: true }));
@@ -553,7 +544,7 @@ Hooks.on("quenchReady", (quench) => {
 
             // Click OK/Save button
             const okButton = findDialogOkButton(dialog);
-            assert.ok(okButton, "OK button should exist in text input dialog");
+            assert.ok(okButton, "OK button should exist in dialog");
 
             okButton.click();
             await new Promise((resolve) => setTimeout(resolve, 500));
@@ -561,7 +552,7 @@ Hooks.on("quenchReady", (quench) => {
             // CRITICAL: Verify actor flag was updated with the custom text
             const updatedPurveyor = actor.getFlag(TARGET_MODULE_ID, "vice_purveyor");
 
-            console.log(`[NPC Test] Text input fallback: "${initialPurveyor}" → "${updatedPurveyor}"`);
+            console.log(`[NPC Test] Custom text entry: "${initialPurveyor}" → "${updatedPurveyor}"`);
 
             assert.strictEqual(
               updatedPurveyor,
