@@ -14,6 +14,7 @@ import {
   waitForActorUpdate,
   isTargetModuleActive,
   closeAllDialogs,
+  testCleanup,
   TestNumberer,
 } from "../test-utils.js";
 
@@ -196,24 +197,15 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         afterEach(async function () {
-          this.timeout(5000);
-          await closeAllDialogs();
-          if (actor) {
-            try {
-              if (actor.sheet) {
-                await actor.sheet.close();
-                await new Promise((resolve) => setTimeout(resolve, 100));
-              }
-            } catch {
-              // Ignore close errors
-            }
-            await actor.delete();
-            actor = null;
-          }
-          // Restore original compendium settings
-          if (originalCompendiumSettings) {
-            await restoreCompendiumSettings(originalCompendiumSettings);
-          }
+          this.timeout(8000);
+          await testCleanup({
+            actors: [actor],
+            settings: originalCompendiumSettings ? {
+              moduleId: TARGET_MODULE_ID,
+              values: { populateFromCompendia: originalCompendiumSettings.populateFromCompendia }
+            } : null
+          });
+          actor = null;
         });
 
         t.test("dialog shows text input field", async function () {
@@ -456,6 +448,380 @@ Hooks.on("quenchReady", (quench) => {
 
           assert.equal(actor.system.heritage, "", "Whitespace-only should clear the field");
         });
+
+        t.test("field is NOT clickable in non-edit mode", async function () {
+          this.timeout(8000);
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Ensure edit mode is OFF
+          if (sheet.allow_edit) {
+            const editToggle = root.querySelector(".toggle-allow-edit");
+            if (editToggle) {
+              editToggle.click();
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+          }
+
+          // Verify we're in non-edit mode
+          assert.strictEqual(sheet.allow_edit, false, "Sheet must be in non-edit mode for this test");
+
+          const selector = findSmartEditField(root, "system.heritage");
+          // In non-edit mode, the element might not exist or should not respond to clicks
+          if (selector) {
+            selector.click();
+            await new Promise((r) => setTimeout(r, 300));
+
+            // Dialog should NOT open in non-edit mode
+            const dialog = await waitForCardDialog(500);
+            assert.notOk(dialog, "Dialog must NOT open when clicking field in non-edit mode");
+          }
+          // If selector doesn't exist in non-edit mode, that's also acceptable
+        });
+
+        t.test("reopening dialog pre-populates existing custom value", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Set a custom value directly
+          await actor.update({ "system.heritage": "Pre-existing Heritage" });
+          await new Promise((r) => setTimeout(r, 200));
+
+          // Re-render to pick up the change
+          sheet.render(false);
+          await new Promise((r) => setTimeout(r, 300));
+          root = sheet.element?.[0] || sheet.element;
+
+          const selector = findSmartEditField(root, "system.heritage");
+          assert.ok(selector, "Heritage field must exist");
+
+          selector.click();
+          const dialog = await waitForCardDialog(3000);
+          assert.ok(dialog, "Dialog should open");
+
+          const textInput = dialog.getTextInput();
+          assert.ok(textInput, "Text input must exist");
+          assert.strictEqual(
+            textInput.value,
+            "Pre-existing Heritage",
+            "Text input MUST be pre-populated with existing value"
+          );
+
+          await dialog.close();
+        });
+
+        t.test("special characters save and display correctly", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          await actor.update({ "system.heritage": "" });
+          await new Promise((r) => setTimeout(r, 100));
+
+          sheet.render(false);
+          await new Promise((r) => setTimeout(r, 200));
+          root = sheet.element?.[0] || sheet.element;
+
+          const selector = findSmartEditField(root, "system.heritage");
+          selector.click();
+          const dialog = await waitForCardDialog(3000);
+          assert.ok(dialog, "Dialog should open");
+
+          // Test with special characters that could break HTML or cause XSS
+          const specialText = `"Heritage" & <Test> 'Quotes'`;
+          const textInput = dialog.getTextInput();
+          typeIntoInput(textInput, specialText);
+
+          await dialog.clickOk();
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((r) => setTimeout(r, 300));
+
+          // Verify data saved correctly (not corrupted)
+          assert.strictEqual(
+            actor.system.heritage,
+            specialText,
+            "Special characters must be saved without corruption"
+          );
+
+          // Verify display on sheet (not rendered as HTML)
+          sheet.render(false);
+          await new Promise((r) => setTimeout(r, 300));
+          root = sheet.element?.[0] || sheet.element;
+
+          const selectorAfter = findSmartEditField(root, "system.heritage");
+          const displayedText = selectorAfter?.textContent?.trim();
+          assert.strictEqual(
+            displayedText,
+            specialText,
+            "Special characters must display correctly on sheet"
+          );
+        });
+
+        t.test("Cancel button leaves actor unchanged", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Set initial value
+          const originalValue = "Original Heritage";
+          await actor.update({ "system.heritage": originalValue });
+          await new Promise((r) => setTimeout(r, 100));
+
+          const selector = findSmartEditField(root, "system.heritage");
+          selector.click();
+          const dialog = await waitForCardDialog(3000);
+          assert.ok(dialog, "Dialog should open");
+
+          // Type new value but then cancel
+          const textInput = dialog.getTextInput();
+          typeIntoInput(textInput, "New Value That Should Not Save");
+
+          // Click cancel/close instead of OK
+          await dialog.close();
+          await new Promise((r) => setTimeout(r, 300));
+
+          // Verify actor was NOT changed
+          assert.strictEqual(
+            actor.system.heritage,
+            originalValue,
+            "Cancel must NOT modify actor data"
+          );
+        });
+
+        t.test("dialog works with compendiums disabled (empty choices)", async function () {
+          this.timeout(10000);
+
+          // Disable compendium population
+          const originalSetting = game.settings.get(TARGET_MODULE_ID, "populateFromCompendia");
+          await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", false);
+          await new Promise((r) => setTimeout(r, 100));
+
+          try {
+            const sheet = await ensureSheet(actor);
+            let root = sheet.element?.[0] || sheet.element;
+
+            const editToggle = root.querySelector(".toggle-allow-edit");
+            if (editToggle && !sheet.allow_edit) {
+              editToggle.click();
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+
+            await actor.update({ "system.heritage": "" });
+            await new Promise((r) => setTimeout(r, 100));
+
+            sheet.render(false);
+            await new Promise((r) => setTimeout(r, 200));
+            root = sheet.element?.[0] || sheet.element;
+
+            const selector = findSmartEditField(root, "system.heritage");
+            selector.click();
+            const dialog = await waitForCardDialog(3000);
+            assert.ok(dialog, "Dialog must open even with compendiums disabled");
+
+            // Text input should still work
+            const textInput = dialog.getTextInput();
+            assert.ok(textInput, "Text input must exist even with no compendium items");
+
+            typeIntoInput(textInput, "Custom Without Compendium");
+
+            await dialog.clickOk();
+            await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+            await new Promise((r) => setTimeout(r, 300));
+
+            assert.strictEqual(
+              actor.system.heritage,
+              "Custom Without Compendium",
+              "Custom text must save when compendiums are disabled"
+            );
+          } finally {
+            // Restore setting
+            await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", originalSetting);
+          }
+        });
+      });
+
+      // ========================================================================
+      // CHARACTER SHEET TESTS - Additional Fields
+      // ========================================================================
+      t.section("Character Sheet Custom Text (Background)", () => {
+        let actor;
+        let originalCompendiumSettings;
+
+        beforeEach(async function () {
+          this.timeout(10000);
+          originalCompendiumSettings = await ensureCompendiumSettings();
+          const result = await createTestActor({ name: "CustomText-Background-Test" });
+          actor = result.actor;
+          await closeAllDialogs();
+        });
+
+        afterEach(async function () {
+          this.timeout(8000);
+          await testCleanup({
+            actors: [actor],
+            settings: originalCompendiumSettings ? {
+              moduleId: TARGET_MODULE_ID,
+              values: { populateFromCompendia: originalCompendiumSettings.populateFromCompendia }
+            } : null
+          });
+          actor = null;
+        });
+
+        t.test("custom background saves and displays correctly", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          await actor.update({ "system.background": "" });
+          await new Promise((r) => setTimeout(r, 100));
+
+          sheet.render(false);
+          await new Promise((r) => setTimeout(r, 200));
+          root = sheet.element?.[0] || sheet.element;
+
+          const selector = findSmartEditField(root, "system.background");
+          assert.ok(selector, "Background field must exist");
+
+          selector.click();
+          const dialog = await waitForCardDialog(3000);
+          assert.ok(dialog, "Dialog should open for background");
+
+          const textInput = dialog.getTextInput();
+          assert.ok(textInput, "Text input must exist");
+
+          typeIntoInput(textInput, "Custom Background");
+
+          await dialog.clickOk();
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((r) => setTimeout(r, 300));
+
+          assert.strictEqual(
+            actor.system.background,
+            "Custom Background",
+            "Custom background must be saved"
+          );
+
+          // Verify display
+          sheet.render(false);
+          await new Promise((r) => setTimeout(r, 300));
+          root = sheet.element?.[0] || sheet.element;
+
+          const selectorAfter = findSmartEditField(root, "system.background");
+          const displayedText = selectorAfter?.textContent?.trim();
+          assert.strictEqual(
+            displayedText,
+            "Custom Background",
+            "Custom background must display on sheet"
+          );
+        });
+      });
+
+      t.section("Character Sheet Custom Text (Vice Purveyor)", () => {
+        let actor;
+        let originalCompendiumSettings;
+
+        beforeEach(async function () {
+          this.timeout(10000);
+          originalCompendiumSettings = await ensureCompendiumSettings();
+          const result = await createTestActor({ name: "CustomText-VicePurveyor-Test" });
+          actor = result.actor;
+          await closeAllDialogs();
+        });
+
+        afterEach(async function () {
+          this.timeout(8000);
+          await testCleanup({
+            actors: [actor],
+            settings: originalCompendiumSettings ? {
+              moduleId: TARGET_MODULE_ID,
+              values: { populateFromCompendia: originalCompendiumSettings.populateFromCompendia }
+            } : null
+          });
+          actor = null;
+        });
+
+        t.test("custom vice purveyor saves to flag and displays correctly", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Clear existing flag
+          await actor.unsetFlag(TARGET_MODULE_ID, "vice_purveyor");
+          await new Promise((r) => setTimeout(r, 100));
+
+          sheet.render(false);
+          await new Promise((r) => setTimeout(r, 200));
+          root = sheet.element?.[0] || sheet.element;
+
+          // Vice purveyor uses a flag, not system field
+          const selector = findSmartEditField(root, `flags.${TARGET_MODULE_ID}.vice_purveyor`);
+          assert.ok(selector, "Vice purveyor field must exist");
+
+          selector.click();
+          const dialog = await waitForCardDialog(3000);
+          assert.ok(dialog, "Dialog should open for vice purveyor");
+
+          const textInput = dialog.getTextInput();
+          assert.ok(textInput, "Text input must exist");
+
+          typeIntoInput(textInput, "Custom Vice Purveyor");
+
+          await dialog.clickOk();
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((r) => setTimeout(r, 300));
+
+          // Vice purveyor saves to flag, not system field
+          const flag = actor.getFlag(TARGET_MODULE_ID, "vice_purveyor");
+          assert.strictEqual(
+            flag,
+            "Custom Vice Purveyor",
+            "Custom vice purveyor must be saved to flag"
+          );
+
+          // Verify display
+          sheet.render(false);
+          await new Promise((r) => setTimeout(r, 300));
+          root = sheet.element?.[0] || sheet.element;
+
+          const selectorAfter = findSmartEditField(root, `flags.${TARGET_MODULE_ID}.vice_purveyor`);
+          const displayedText = selectorAfter?.textContent?.trim();
+          assert.strictEqual(
+            displayedText,
+            "Custom Vice Purveyor",
+            "Custom vice purveyor must display on sheet"
+          );
+        });
       });
 
       // ========================================================================
@@ -478,24 +844,15 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         afterEach(async function () {
-          this.timeout(5000);
-          await closeAllDialogs();
-          if (actor) {
-            try {
-              if (actor.sheet) {
-                await actor.sheet.close();
-                await new Promise((resolve) => setTimeout(resolve, 100));
-              }
-            } catch {
-              // Ignore close errors
-            }
-            await actor.delete();
-            actor = null;
-          }
-          // Restore original compendium settings
-          if (originalCompendiumSettings) {
-            await restoreCompendiumSettings(originalCompendiumSettings);
-          }
+          this.timeout(8000);
+          await testCleanup({
+            actors: [actor],
+            settings: originalCompendiumSettings ? {
+              moduleId: TARGET_MODULE_ID,
+              values: { populateFromCompendia: originalCompendiumSettings.populateFromCompendia }
+            } : null
+          });
+          actor = null;
         });
 
         t.test("enter custom reputation saves to flag and displays on sheet", async function () {
@@ -739,6 +1096,242 @@ Hooks.on("quenchReady", (quench) => {
 
           assert.notOk(item, "Item should be deleted after clear");
           assert.notOk(flag, "Flag should be cleared after clear");
+        });
+      });
+
+      // ========================================================================
+      // CREW SHEET TESTS (Hunting Grounds)
+      // ========================================================================
+      t.section("Crew Sheet Custom Text (Hunting Grounds)", () => {
+        let actor;
+        let originalCompendiumSettings;
+
+        beforeEach(async function () {
+          this.timeout(10000);
+          originalCompendiumSettings = await ensureCompendiumSettings();
+          const result = await createTestCrewActor({
+            name: "CustomText-HuntingGrounds-Test",
+            crewTypeName: "Assassins"
+          });
+          actor = result.actor;
+          await closeAllDialogs();
+        });
+
+        afterEach(async function () {
+          this.timeout(8000);
+          await testCleanup({
+            actors: [actor],
+            settings: originalCompendiumSettings ? {
+              moduleId: TARGET_MODULE_ID,
+              values: { populateFromCompendia: originalCompendiumSettings.populateFromCompendia }
+            } : null
+          });
+          actor = null;
+        });
+
+        t.test("enter custom hunting grounds saves to flag and displays on sheet", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          let root = sheet.element?.[0] || sheet.element;
+
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Ensure no existing hunting grounds item or flag
+          const existingHG = getOwnedItemByType(actor, "hunting_grounds");
+          if (existingHG) {
+            await actor.deleteEmbeddedDocuments("Item", [existingHG.id]);
+          }
+          await actor.unsetFlag(TARGET_MODULE_ID, "customHuntingGrounds");
+          await new Promise((r) => setTimeout(r, 100));
+
+          // Re-render and re-get root after cleanup
+          sheet.render(false);
+          await new Promise((r) => setTimeout(r, 200));
+          root = sheet.element?.[0] || sheet.element;
+
+          const selector = findSmartItemSelector(root, "hunting_grounds");
+          assert.ok(selector, "Hunting grounds selector must exist");
+
+          selector.click();
+          const dialog = await waitForCardDialog(3000);
+          assert.ok(dialog, "Dialog should open");
+
+          const textInput = dialog.getTextInput();
+          assert.ok(textInput, "Text input must exist for custom value entry");
+
+          typeIntoInput(textInput, "Custom Hunting Grounds");
+
+          await dialog.clickOk();
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((r) => setTimeout(r, 300));
+
+          // Verify flag was set and no item was created
+          const flag = actor.getFlag(TARGET_MODULE_ID, "customHuntingGrounds");
+          const item = getOwnedItemByType(actor, "hunting_grounds");
+
+          assert.strictEqual(flag, "Custom Hunting Grounds", "Custom hunting grounds must be saved to flag");
+          assert.notOk(item, "No hunting_grounds item should exist for custom value");
+
+          // CRITICAL: Verify custom text displays on the sheet (not just saved to flag)
+          sheet.render(false);
+          await new Promise((r) => setTimeout(r, 300));
+          root = sheet.element?.[0] || sheet.element;
+
+          const selectorAfter = findSmartItemSelector(root, "hunting_grounds");
+          const displayedText = selectorAfter?.textContent?.trim();
+          assert.strictEqual(
+            displayedText,
+            "Custom Hunting Grounds",
+            "Custom hunting grounds text must display on the sheet"
+          );
+        });
+
+        t.test("select compendium hunting grounds creates item (not flag)", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Clear existing
+          const existingHG = getOwnedItemByType(actor, "hunting_grounds");
+          if (existingHG) {
+            await actor.deleteEmbeddedDocuments("Item", [existingHG.id]);
+          }
+          await actor.unsetFlag(TARGET_MODULE_ID, "customHuntingGrounds");
+          await new Promise((r) => setTimeout(r, 100));
+
+          const selector = findSmartItemSelector(root, "hunting_grounds");
+          selector.click();
+          const dialog = await waitForCardDialog(3000);
+          assert.ok(dialog, "Dialog should open");
+
+          const radios = dialog.getRadios();
+          assert.ok(radios.length > 0, "Compendium hunting grounds items should be available");
+
+          const firstRadio = radios[0];
+          const label = firstRadio.closest("label");
+          if (label) label.click();
+          else firstRadio.click();
+          await new Promise((r) => setTimeout(r, 100));
+
+          await dialog.clickOk();
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((r) => setTimeout(r, 300));
+
+          const item = getOwnedItemByType(actor, "hunting_grounds");
+          const flag = actor.getFlag(TARGET_MODULE_ID, "customHuntingGrounds");
+
+          assert.ok(item, "hunting_grounds item must be created for compendium selection");
+          assert.notOk(flag, "Custom flag must NOT be set for compendium selection");
+        });
+
+        t.test("changing from item to custom text deletes item and sets flag", async function () {
+          this.timeout(12000);
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // First, select a compendium item
+          let existingHG = getOwnedItemByType(actor, "hunting_grounds");
+          if (existingHG) {
+            await actor.deleteEmbeddedDocuments("Item", [existingHG.id]);
+          }
+          await actor.unsetFlag(TARGET_MODULE_ID, "customHuntingGrounds");
+          await new Promise((r) => setTimeout(r, 100));
+
+          let selector = findSmartItemSelector(root, "hunting_grounds");
+          selector.click();
+          let dialog = await waitForCardDialog(3000);
+
+          const radios = dialog.getRadios();
+          assert.ok(radios.length > 0, "Compendium items should be available");
+
+          const firstRadio = radios[0];
+          const label = firstRadio.closest("label");
+          if (label) label.click();
+          else firstRadio.click();
+          await new Promise((r) => setTimeout(r, 100));
+          await dialog.clickOk();
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((r) => setTimeout(r, 300));
+
+          // Verify item exists BEFORE switching (fail fast if setup broken)
+          let item = getOwnedItemByType(actor, "hunting_grounds");
+          assert.ok(item, "Item MUST exist after compendium selection (test setup)");
+
+          // Re-render and re-get element refs
+          sheet.render(false);
+          await new Promise((r) => setTimeout(r, 200));
+          const newRoot = sheet.element?.[0] || sheet.element;
+
+          // Now switch to custom text
+          selector = findSmartItemSelector(newRoot, "hunting_grounds");
+          selector.click();
+          dialog = await waitForCardDialog(3000);
+          assert.ok(dialog, "Dialog should reopen");
+
+          const textInput = dialog.getTextInput();
+          typeIntoInput(textInput, "My Custom Hunting Grounds");
+
+          await dialog.clickOk();
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((r) => setTimeout(r, 300));
+
+          // Verify item was deleted and flag was set
+          item = getOwnedItemByType(actor, "hunting_grounds");
+          const flag = actor.getFlag(TARGET_MODULE_ID, "customHuntingGrounds");
+
+          assert.notOk(item, "Item must be deleted when switching to custom text");
+          assert.strictEqual(flag, "My Custom Hunting Grounds", "Flag must be set with custom text");
+        });
+
+        t.test("clear removes both item and flag", async function () {
+          this.timeout(10000);
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Set up with custom flag
+          await actor.setFlag(TARGET_MODULE_ID, "customHuntingGrounds", "Custom Value To Clear");
+          await new Promise((r) => setTimeout(r, 100));
+
+          // Verify flag was set (fail fast if setup broken)
+          const flagBefore = actor.getFlag(TARGET_MODULE_ID, "customHuntingGrounds");
+          assert.strictEqual(flagBefore, "Custom Value To Clear", "Flag MUST be set before clear (test setup)");
+
+          const selector = findSmartItemSelector(root, "hunting_grounds");
+          selector.click();
+          const dialog = await waitForCardDialog(3000);
+          assert.ok(dialog, "Dialog should open");
+
+          await dialog.clickClear();
+          await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+          await new Promise((r) => setTimeout(r, 300));
+
+          const item = getOwnedItemByType(actor, "hunting_grounds");
+          const flag = actor.getFlag(TARGET_MODULE_ID, "customHuntingGrounds");
+
+          assert.notOk(item, "Item must be deleted after clear");
+          assert.notOk(flag, "Flag must be cleared after clear");
         });
       });
     },
