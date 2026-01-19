@@ -751,19 +751,6 @@ Hooks.on("quenchReady", (quench) => {
 
           // Wait for clock enrichment (V13 async @UUID enrichment + replaceClockLinks)
           const clockEl = await waitForClockElement(root, { timeoutMs: 3000 });
-
-          // Debug V12 journal rendering
-          if (!clockEl) {
-            console.log(`[GlobalClocks Test 4.4.2] Foundry version: ${game.version}`);
-            console.log(`[GlobalClocks Test 4.4.2] Root element: ${root.tagName}.${root.className}`);
-            console.log(`[GlobalClocks Test 4.4.2] Root innerHTML preview: ${root.innerHTML.substring(0, 500)}`);
-            const contentLink = root.querySelector('a.content-link[data-type="Actor"]');
-            console.log(`[GlobalClocks Test 4.4.2] Content link found: ${!!contentLink}`);
-            if (contentLink) {
-              console.log(`[GlobalClocks Test 4.4.2] Content link UUID: ${contentLink.dataset.uuid}`);
-            }
-          }
-
           assert.ok(clockEl,
             "Clock should render in journal - enrichment may not be active");
 
