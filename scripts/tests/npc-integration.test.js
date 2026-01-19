@@ -111,6 +111,13 @@ function findSelectionDialog() {
     return v2AltDialog.closest("dialog");
   }
 
+  // V2 alternate: dialog with custom text input (for custom text entry)
+  const v2CustomTextDialog = document.querySelector("dialog[open] input[name='customTextValue']");
+  if (v2CustomTextDialog) {
+    console.log("[NPC Test] findSelectionDialog: Found V2 dialog (customTextValue input)");
+    return v2CustomTextDialog.closest("dialog");
+  }
+
   // V1: Foundry Dialog application
   const v1Dialog = document.querySelector(".dialog .selection-dialog");
   if (v1Dialog) {
@@ -132,12 +139,31 @@ function findSelectionDialog() {
     return anyDialog;
   }
 
-  // Debug: Log what dialogs exist
-  const openDialogs = document.querySelectorAll("dialog[open]");
-  const v1Dialogs = document.querySelectorAll(".dialog.app");
-  console.log(`[NPC Test] findSelectionDialog: No selection dialog found. Open dialogs: ${openDialogs.length}, V1 dialogs: ${v1Dialogs.length}`);
-
   return null;
+}
+
+/**
+ * Poll for the selection dialog to appear.
+ * @param {number} timeoutMs - Maximum time to wait
+ * @returns {Promise<HTMLElement|null>}
+ */
+async function waitForSelectionDialog(timeoutMs = 3000) {
+  const start = Date.now();
+  return new Promise((resolve) => {
+    const check = () => {
+      const dialog = findSelectionDialog();
+      if (dialog) {
+        resolve(dialog);
+        return;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        resolve(null);
+        return;
+      }
+      setTimeout(check, 50);
+    };
+    check();
+  });
 }
 
 /**
@@ -334,12 +360,11 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(smartField, "Vice purveyor smart field should exist in edit mode");
 
           smartField.click();
-          await new Promise((resolve) => setTimeout(resolve, 500));
 
           // From here on, a dialog might be open - use try/finally to ensure cleanup
           try {
             // Find the selection dialog
-            const dialog = findSelectionDialog();
+            const dialog = await waitForSelectionDialog(3000);
             assert.ok(dialog, "Selection dialog should open after clicking vice purveyor smart field");
 
             // Get the choices from the dialog
@@ -396,12 +421,11 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(smartField, "Vice purveyor smart field should exist in edit mode");
 
           smartField.click();
-          await new Promise((resolve) => setTimeout(resolve, 500));
 
           // From here on, a dialog might be open - use try/finally to ensure cleanup
           try {
             // Find the selection dialog
-            const dialog = findSelectionDialog();
+            const dialog = await waitForSelectionDialog(3000);
             assert.ok(dialog, "Selection dialog should open after clicking vice purveyor smart field");
 
             // Get choices and select the first one (or the one matching our test NPC)
@@ -499,13 +523,19 @@ Hooks.on("quenchReady", (quench) => {
 
           // Open character sheet and enable edit mode
           const sheet = await ensureSheet(actor);
-          const root = sheet.element?.[0] || sheet.element;
+          let root = sheet.element?.[0] || sheet.element;
 
           const editToggle = root.querySelector(".toggle-allow-edit");
           if (editToggle && !sheet.allow_edit) {
             editToggle.click();
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            // Wait for re-render after edit mode toggle
+            await new Promise((resolve) => setTimeout(resolve, 300));
           }
+
+          // Force re-render and re-fetch root to ensure fresh state
+          await sheet.render(true);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          root = sheet.element?.[0] || sheet.element;
 
           // CRITICAL: Capture initial value
           const initialPurveyor = actor.getFlag(TARGET_MODULE_ID, "vice_purveyor") || "";
@@ -515,13 +545,12 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(smartField, "Vice purveyor smart field should exist in edit mode");
 
           smartField.click();
-          await new Promise((resolve) => setTimeout(resolve, 500));
 
           // From here on, a dialog might be open - use try/finally to ensure cleanup
           try {
             // With the combined dialog, we always get a card selection dialog
             // that includes a text input field for custom values
-            const dialog = findSelectionDialog();
+            const dialog = await waitForSelectionDialog(5000);
             assert.ok(dialog, "Selection dialog should open");
 
             // Verify there are no NPC choices (cards) in the dialog
@@ -533,7 +562,7 @@ Hooks.on("quenchReady", (quench) => {
             );
 
             // The dialog should have a text input for custom values
-            const textInput = dialog.querySelector('input[type="text"].custom-text-input');
+            const textInput = dialog.querySelector('input[name="customTextValue"]');
             assert.ok(textInput, "Custom text input should exist in dialog");
 
             // Enter a custom value
