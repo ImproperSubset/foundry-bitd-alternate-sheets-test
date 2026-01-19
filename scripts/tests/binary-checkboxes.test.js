@@ -130,6 +130,46 @@ function getItemLoad(itemEl) {
 
 const t = new TestNumberer("11");
 
+/**
+ * Trigger a change event on a checkbox using the sheet's jQuery context.
+ * This is required because event handlers are bound via jQuery delegation.
+ * @param {ActorSheet} sheet - The sheet containing the checkbox
+ * @param {HTMLInputElement} checkbox - The checkbox element
+ */
+function triggerCheckboxChange(sheet, checkbox) {
+  const checkboxId = checkbox.id;
+  const sheetEl = sheet.element;
+  if (checkboxId) {
+    $(sheetEl).find(`#${CSS.escape(checkboxId)}`).trigger("change");
+  } else {
+    // Fallback: try data attributes
+    const itemBlock = checkbox.closest(".item-block");
+    const itemId = itemBlock?.dataset?.itemId;
+    if (itemId) {
+      $(sheetEl).find(`.item-block[data-item-id="${itemId}"] input[type="checkbox"]`).first().trigger("change");
+    } else {
+      // Last resort: native click
+      checkbox.click();
+    }
+  }
+}
+
+/**
+ * Trigger a change event on a select element using the sheet's jQuery context.
+ * @param {ActorSheet} sheet - The sheet containing the select
+ * @param {HTMLSelectElement} select - The select element
+ */
+function triggerSelectChange(sheet, select) {
+  const selectName = select.name;
+  const sheetEl = sheet.element;
+  if (selectName) {
+    $(sheetEl).find(`select[name="${selectName}"]`).trigger("change");
+  } else {
+    // Fallback: native event
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
     console.warn(`[${MODULE_ID}] bitd-alternate-sheets not active, skipping binary checkboxes tests`);
@@ -178,8 +218,8 @@ Hooks.on("quenchReady", (quench) => {
           const loadPills = findLoadPills(root);
 
           assert.ok(
-            loadSection || loadPills.length > 0,
-            "Load section or load pills should exist on character sheet"
+            loadSection !== null || loadPills.length > 0,
+            `Load section or load pills should exist on character sheet (found section: ${loadSection !== null}, pills: ${loadPills.length})`
           );
         });
 
@@ -194,14 +234,9 @@ Hooks.on("quenchReady", (quench) => {
           if (loadPills.length === 0) {
             // Check for load value display instead
             const loadValue = getLoadValue(root);
-            if (loadValue === null) {
-              console.log("[BinaryCheckboxes Test] No load display found");
-              this.skip();
-              return;
-            }
             assert.ok(
               loadValue !== null,
-              "Load value should be displayed"
+              "Load value should be displayed on character sheet - template may be broken"
             );
             return;
           }
@@ -259,7 +294,7 @@ Hooks.on("quenchReady", (quench) => {
               if (checkbox) {
                 toggledItemId = item.dataset?.itemId;
                 toggledItemName = item.dataset?.itemName || "unknown";
-                checkbox.click();
+                triggerCheckboxChange(sheet, checkbox);
                 toggled = true;
                 break;
               }
@@ -273,19 +308,16 @@ Hooks.on("quenchReady", (quench) => {
                 const itemBlock = checkbox.closest(".item-block");
                 toggledItemId = itemBlock?.dataset?.itemId;
                 toggledItemName = itemBlock?.dataset?.itemName || "unknown";
-                checkbox.click();
+                triggerCheckboxChange(sheet, checkbox);
                 toggled = true;
                 break;
               }
             }
           }
 
-          // NOTE: If all items are already equipped, we can't test equipping - legitimate skip
-          if (!toggled) {
-            console.log("[BinaryCheckboxes Test] All items already equipped - cannot test equipping");
-            this.skip(); // Legitimate: all items pre-equipped
-            return;
-          }
+          // CRITICAL: Fresh actor should have unequipped items to toggle
+          assert.ok(toggled,
+            "Fresh Cutter actor should have at least one unequipped item - test setup may be broken or playbook has no items");
 
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
@@ -380,12 +412,9 @@ Hooks.on("quenchReady", (quench) => {
           console.log(`[BinaryCheckboxes Test] ${unequippedCount} unequipped items`);
           console.log(`[BinaryCheckboxes Test] Item load values:`, loadInfo.slice(0, 5));
 
-          // NOTE: If no unequipped items with load > 0 exist, skip is legitimate
-          if (!targetItem || !targetCheckbox || itemLoadValue === 0) {
-            console.log("[BinaryCheckboxes Test] No unequipped item with load > 0 found - all may be equipped");
-            this.skip(); // Legitimate: test data state
-            return;
-          }
+          // CRITICAL: Fresh actor should have unequipped items with load > 0
+          assert.ok(targetItem && targetCheckbox && itemLoadValue > 0,
+            `Fresh Cutter actor should have unequipped items with load > 0 (found: item=${!!targetItem}, checkbox=${!!targetCheckbox}, load=${itemLoadValue})`);
 
           const itemId = targetItem.dataset?.itemId;
           const itemName = targetItem.dataset?.itemName || "unknown";
@@ -393,7 +422,7 @@ Hooks.on("quenchReady", (quench) => {
           console.log(`[BinaryCheckboxes Test] Equipping "${itemName}" with load ${itemLoadValue}`);
 
           // Click to equip
-          targetCheckbox.click();
+          triggerCheckboxChange(sheet, targetCheckbox);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -404,11 +433,9 @@ Hooks.on("quenchReady", (quench) => {
           const newRoot = actor.sheet.element?.[0] || actor.sheet.element;
           const newLoad = getLoadValue(newRoot);
 
-          if (newLoad === null) {
-            console.log("[BinaryCheckboxes Test] Cannot read new load value");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Load display must be readable - template may be broken
+          assert.ok(newLoad !== null,
+            "Load value should be readable after item equip - template may be broken");
 
           // CRITICAL: Assert load increased by EXACT item load value
           const expectedLoad = initialLoad + itemLoadValue;
@@ -457,17 +484,14 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
-          // NOTE: If no unequipped items with load > 0 exist, skip is legitimate
-          if (!targetItem || !targetCheckbox || itemLoadValue === 0) {
-            console.log("[BinaryCheckboxes Test] No unequipped item with load > 0 found for unequip test");
-            this.skip(); // Legitimate: test data state
-            return;
-          }
+          // CRITICAL: Fresh actor should have unequipped items with load > 0 for unequip test
+          assert.ok(targetItem && targetCheckbox && itemLoadValue > 0,
+            `Fresh Cutter actor should have unequipped items with load > 0 for unequip test (found: item=${!!targetItem}, checkbox=${!!targetCheckbox}, load=${itemLoadValue})`);
 
           console.log(`[BinaryCheckboxes Test] First equipping "${itemName}" with load ${itemLoadValue}`);
 
           // Equip the item first
-          targetCheckbox.click();
+          triggerCheckboxChange(sheet, targetCheckbox);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -478,11 +502,9 @@ Hooks.on("quenchReady", (quench) => {
           root = actor.sheet.element?.[0] || actor.sheet.element;
           const loadAfterEquip = getLoadValue(root);
 
-          if (loadAfterEquip === null) {
-            console.log("[BinaryCheckboxes Test] Cannot read load after equip");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Load display must be readable - template may be broken
+          assert.ok(loadAfterEquip !== null,
+            "Load value should be readable after equip - template may be broken");
 
           // Find the now-equipped item's checkbox (need to re-query after render)
           const updatedGearItems = findGearItems(root);
@@ -502,7 +524,7 @@ Hooks.on("quenchReady", (quench) => {
           console.log(`[BinaryCheckboxes Test] Now unequipping "${itemName}"`);
 
           // Unequip the item
-          targetCheckbox.click();
+          triggerCheckboxChange(actor.sheet, targetCheckbox);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -513,11 +535,9 @@ Hooks.on("quenchReady", (quench) => {
           const finalRoot = actor.sheet.element?.[0] || actor.sheet.element;
           const loadAfterUnequip = getLoadValue(finalRoot);
 
-          if (loadAfterUnequip === null) {
-            console.log("[BinaryCheckboxes Test] Cannot read load after unequip");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Load display must be readable - template may be broken
+          assert.ok(loadAfterUnequip !== null,
+            "Load value should be readable after unequip - template may be broken");
 
           // CRITICAL: Assert load decreased by EXACT item load value
           const expectedLoad = loadAfterEquip - itemLoadValue;
@@ -570,7 +590,7 @@ Hooks.on("quenchReady", (quench) => {
           // Should have some form of item selection UI
           assert.ok(
             binaryCheckboxes.length > 0 || gearItems.length > 0,
-            "Binary checkboxes or gear items should exist"
+            `Binary checkboxes or gear items should exist (checkboxes: ${binaryCheckboxes.length}, gearItems: ${gearItems.length})`
           );
         });
 
@@ -609,18 +629,15 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
-          // NOTE: If all items are already equipped, we can't test toggle - legitimate skip
-          if (!targetCheckbox) {
-            console.log("[BinaryCheckboxes Test] All items already equipped - cannot test toggle");
-            this.skip(); // Legitimate: test data state
-            return;
-          }
+          // CRITICAL: Fresh actor should have at least one unchecked checkbox
+          assert.ok(targetCheckbox,
+            "Fresh Cutter actor should have at least one unchecked item checkbox - test setup may be broken");
 
           // CRITICAL: Get initial equipped items from actor flags
           const equippedBefore = actor.getFlag(TARGET_MODULE_ID, "equipped-items") || {};
           const equippedCountBefore = Object.keys(equippedBefore).length;
 
-          targetCheckbox.click();
+          triggerCheckboxChange(sheet, targetCheckbox);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -703,7 +720,7 @@ Hooks.on("quenchReady", (quench) => {
                 const itemBlock = checkbox.closest(".item-block");
                 itemId = itemBlock?.dataset?.itemId;
                 itemName = itemBlock?.dataset?.itemName;
-                checkbox.click();
+                triggerCheckboxChange(sheet, checkbox);
                 await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
                 await new Promise((resolve) => setTimeout(resolve, 200));
                 // DOM may have re-rendered - re-query the checkbox
@@ -750,7 +767,7 @@ Hooks.on("quenchReady", (quench) => {
             );
           }
 
-          targetCheckbox.click();
+          triggerCheckboxChange(actor.sheet, targetCheckbox);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -868,17 +885,15 @@ Hooks.on("quenchReady", (quench) => {
           const currentValue = loadSelector.value;
           const differentOption = options.find(opt => opt.value !== currentValue);
 
-          if (!differentOption) {
-            console.log("[LoadLevel Test] Only one option available - cannot test change");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Load level selector should have multiple options
+          assert.ok(differentOption,
+            `Load level selector should have at least 2 different options (found ${options.length} total, current: "${currentValue}")`);
 
           console.log(`[LoadLevel Test] Changing from "${currentValue}" to "${differentOption.value}"`);
 
           // Change the load level
           loadSelector.value = differentOption.value;
-          loadSelector.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerSelectChange(sheet, loadSelector);
 
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
@@ -914,15 +929,13 @@ Hooks.on("quenchReady", (quench) => {
             opt => opt.value === "BITD.Light" || opt.value === "BITD.Discreet"
           );
 
-          if (!lightOption) {
-            console.log("[LoadLevel Test] Light/Discreet option not found");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Light/Discreet option should exist in load level selector
+          assert.ok(lightOption,
+            `Light/Discreet option should exist in load selector. Available options: ${Array.from(loadSelector.options).map(o => o.value).join(", ")}`);
 
           // Set to Light
           loadSelector.value = lightOption.value;
-          loadSelector.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerSelectChange(sheet, loadSelector);
 
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await sheet.render(true);
@@ -958,15 +971,13 @@ Hooks.on("quenchReady", (quench) => {
             opt => opt.value === "BITD.Heavy" || opt.value === "BITD.Encumbered"
           );
 
-          if (!heavyOption) {
-            console.log("[LoadLevel Test] Heavy/Encumbered option not found");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Heavy/Encumbered option should exist in load level selector
+          assert.ok(heavyOption,
+            `Heavy/Encumbered option should exist in load selector. Available options: ${Array.from(loadSelector.options).map(o => o.value).join(", ")}`);
 
           // Set to Heavy
           loadSelector.value = heavyOption.value;
-          loadSelector.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerSelectChange(sheet, loadSelector);
 
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await sheet.render(true);
@@ -1060,7 +1071,7 @@ Hooks.on("quenchReady", (quench) => {
             );
             if (lightOption) {
               loadSelector.value = lightOption.value;
-              loadSelector.dispatchEvent(new Event("change", { bubbles: true }));
+              triggerSelectChange(sheet, loadSelector);
               await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
               await sheet.render(true);
               await new Promise((resolve) => setTimeout(resolve, 300));
@@ -1101,7 +1112,7 @@ Hooks.on("quenchReady", (quench) => {
                   const itemName = item.dataset?.itemName || "unknown";
                   console.log(`[LoadPill Test] Equipping "${itemName}" (load ${itemLoad})`);
 
-                  checkbox.click();
+                  triggerCheckboxChange(sheet, checkbox);
                   await waitForActorUpdate(actor, { timeoutMs: 1500 }).catch(() => {});
                   await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -1171,7 +1182,7 @@ Hooks.on("quenchReady", (quench) => {
             );
             if (lightOption) {
               loadSelector.value = lightOption.value;
-              loadSelector.dispatchEvent(new Event("change", { bubbles: true }));
+              triggerSelectChange(sheet, loadSelector);
               await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
               await sheet.render(true);
               await new Promise((resolve) => setTimeout(resolve, 300));
@@ -1211,7 +1222,7 @@ Hooks.on("quenchReady", (quench) => {
                   const itemName = item.dataset?.itemName || "unknown";
                   console.log(`[LoadPill Test] Equipping "${itemName}" (load ${itemLoad})`);
 
-                  checkbox.click();
+                  triggerCheckboxChange(sheet, checkbox);
                   await waitForActorUpdate(actor, { timeoutMs: 1500 }).catch(() => {});
                   await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -1254,8 +1265,11 @@ Hooks.on("quenchReady", (quench) => {
               "Load pill should NOT have 'at-max' class when over max"
             );
           } else {
-            console.log(`[LoadPill Test] Could not exceed max load (${finalLoad}/${finalMax})`);
-            this.skip(); // Cannot test over-max without enough items
+            // If we couldn't exceed max, fail with diagnostic info about available items
+            assert.fail(
+              `Could not exceed max load (${finalLoad}/${finalMax}). ` +
+              `Test requires more items or items with higher load values to exceed the max.`
+            );
           }
         });
 
@@ -1286,8 +1300,11 @@ Hooks.on("quenchReady", (quench) => {
               `Load pill should NOT have 'over-max' class when under max (${currentLoad}/${maxLoad})`
             );
           } else {
-            console.log("[LoadPill Test] Load already at or over max - skipping under-max test");
-            this.skip();
+            // Fresh actor should have load under max - if not, test setup is broken
+            assert.fail(
+              `Fresh actor should have load under max (got ${currentLoad}/${maxLoad}). ` +
+              `Test setup may have pre-equipped items.`
+            );
           }
         });
       });
@@ -1375,11 +1392,10 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
-          if (!targetItem || !targetCheckboxes) {
-            console.log("[MultiCost Test] No unequipped multi-cost item found");
-            this.skip();
-            return;
-          }
+          // Multi-cost items (load > 1 with multiple checkboxes) are playbook-specific
+          // Cutter playbook should have multi-cost items like "Fine Hand Weapon (2 load)"
+          assert.ok(targetItem && targetCheckboxes,
+            "Cutter playbook should have unequipped multi-cost items (load > 1 with multiple checkboxes)");
 
           const itemName = targetItem.dataset?.itemName || "unknown";
           const checkboxCount = targetCheckboxes.length;
@@ -1391,7 +1407,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.strictEqual(initialChecked, 0, `Multi-cost item "${itemName}" should have 0 checked initially`);
 
           // Click the FIRST checkbox only
-          targetCheckboxes[0].click();
+          triggerCheckboxChange(sheet, targetCheckboxes[0]);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -1456,11 +1472,10 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
-          if (!targetItem || !targetCheckboxes) {
-            console.log("[MultiCost Test] No multi-cost item found");
-            this.skip();
-            return;
-          }
+          // Multi-cost items (load > 1 with multiple checkboxes) are playbook-specific
+          // Cutter playbook should have multi-cost items
+          assert.ok(targetItem && targetCheckboxes,
+            "Cutter playbook should have multi-cost items (load > 1 with multiple checkboxes)");
 
           const itemName = targetItem.dataset?.itemName || "unknown";
           const itemId = targetItem.dataset?.itemId;
@@ -1470,7 +1485,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // If not equipped, equip it first
           if (!wasEquipped) {
-            targetCheckboxes[0].click();
+            triggerCheckboxChange(sheet, targetCheckboxes[0]);
             await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
             await new Promise((resolve) => setTimeout(resolve, 300));
             await sheet.render(true);
@@ -1500,7 +1515,7 @@ Hooks.on("quenchReady", (quench) => {
           );
 
           // Click any checkbox to unequip (binary toggle)
-          targetCheckboxes[0].click();
+          triggerCheckboxChange(sheet, targetCheckboxes[0]);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 

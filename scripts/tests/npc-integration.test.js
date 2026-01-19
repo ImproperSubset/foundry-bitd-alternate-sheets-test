@@ -331,11 +331,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find and click the vice purveyor smart field to open dialog
           const smartField = findVicePurveyorSmartField(root);
-          if (!smartField) {
-            console.log("[NPC Test] Vice purveyor smart field not found");
-            this.skip();
-            return;
-          }
+          assert.ok(smartField, "Vice purveyor smart field should exist in edit mode");
 
           smartField.click();
           await new Promise((resolve) => setTimeout(resolve, 500));
@@ -344,11 +340,7 @@ Hooks.on("quenchReady", (quench) => {
           try {
             // Find the selection dialog
             const dialog = findSelectionDialog();
-            if (!dialog) {
-              console.log("[NPC Test] Selection dialog did not open");
-              this.skip();
-              return;
-            }
+            assert.ok(dialog, "Selection dialog should open after clicking vice purveyor smart field");
 
             // Get the choices from the dialog
             const choices = getDialogChoices(dialog);
@@ -401,11 +393,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find and click the vice purveyor smart field
           const smartField = findVicePurveyorSmartField(root);
-          if (!smartField) {
-            console.log("[NPC Test] Vice purveyor smart field not found for selection test");
-            this.skip();
-            return;
-          }
+          assert.ok(smartField, "Vice purveyor smart field should exist in edit mode");
 
           smartField.click();
           await new Promise((resolve) => setTimeout(resolve, 500));
@@ -414,19 +402,11 @@ Hooks.on("quenchReady", (quench) => {
           try {
             // Find the selection dialog
             const dialog = findSelectionDialog();
-            if (!dialog) {
-              console.log("[NPC Test] Selection dialog did not open for selection test");
-              this.skip();
-              return;
-            }
+            assert.ok(dialog, "Selection dialog should open after clicking vice purveyor smart field");
 
             // Get choices and select the first one (or the one matching our test NPC)
             const choices = getDialogChoices(dialog);
-            if (choices.length === 0) {
-              console.log("[NPC Test] No choices in dialog for selection test");
-              this.skip();
-              return;
-            }
+            assert.ok(choices.length > 0, "Selection dialog should have at least one choice (the test NPC)");
 
             // Find the radio input and select it
             const targetChoice = choices.find((c) => c.textContent?.includes("Selectable Vice Purveyor")) || choices[0];
@@ -441,11 +421,7 @@ Hooks.on("quenchReady", (quench) => {
 
             // Click the OK button
             const okButton = findDialogOkButton(dialog);
-            if (!okButton) {
-              console.log("[NPC Test] OK button not found in dialog");
-              this.skip();
-              return;
-            }
+            assert.ok(okButton, "OK button should exist in selection dialog");
 
             okButton.click();
             await new Promise((resolve) => setTimeout(resolve, 500));
@@ -503,12 +479,7 @@ Hooks.on("quenchReady", (quench) => {
           const targetElement = smartField || display;
 
           console.log(`[NPC Test 9.1.3] smartField: ${!!smartField}, display: ${!!display}`);
-
-          if (!targetElement) {
-            console.log("[NPC Test] No vice purveyor element found for display test");
-            this.skip();
-            return;
-          }
+          assert.ok(targetElement, "Vice purveyor element (smart field or display) should exist on sheet");
 
           const displayText = targetElement.textContent?.trim() || targetElement.dataset?.value || "";
 
@@ -541,11 +512,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find and click the vice purveyor smart field
           const smartField = findVicePurveyorSmartField(root);
-          if (!smartField) {
-            console.log("[NPC Test] Vice purveyor smart field not found for text input test");
-            this.skip();
-            return;
-          }
+          assert.ok(smartField, "Vice purveyor smart field should exist in edit mode");
 
           smartField.click();
           await new Promise((resolve) => setTimeout(resolve, 500));
@@ -557,20 +524,18 @@ Hooks.on("quenchReady", (quench) => {
             const cardDialog = findSelectionDialog();
 
             // If we got a card selection dialog (even with 0 choices), that's unexpected
+            // This means there are Vice Purveyor NPCs in the world, which shouldn't happen
             if (cardDialog && isCardSelectionDialog(cardDialog)) {
               const choices = getDialogChoices(cardDialog);
-              console.log(`[NPC Test] Got card selection dialog with ${choices.length} choices - expected text input`);
-              this.skip();
-              return;
+              assert.fail(
+                `Expected text input dialog but got card selection dialog with ${choices.length} choices. ` +
+                `Ensure no Vice Purveyor NPCs exist in the world for this test.`
+              );
             }
 
             // Verify we got a text input dialog
             const dialog = textDialog;
-            if (!dialog) {
-              console.log("[NPC Test] No text input dialog opened for text input test");
-              this.skip();
-              return;
-            }
+            assert.ok(dialog, "Text input dialog should open when no Vice Purveyor NPCs exist");
 
             assert.ok(
               isTextInputDialog(dialog),
@@ -579,11 +544,7 @@ Hooks.on("quenchReady", (quench) => {
 
             // Enter a custom value
             const textInput = dialog.querySelector('input[type="text"][name="value"]');
-            if (!textInput) {
-              console.log("[NPC Test] Text input not found in dialog");
-              this.skip();
-              return;
-            }
+            assert.ok(textInput, "Text input should exist in text input dialog");
 
             const customValue = "Custom Vice Purveyor Name";
             textInput.value = customValue;
@@ -592,11 +553,7 @@ Hooks.on("quenchReady", (quench) => {
 
             // Click OK/Save button
             const okButton = findDialogOkButton(dialog);
-            if (!okButton) {
-              console.log("[NPC Test] OK button not found in text input dialog");
-              this.skip();
-              return;
-            }
+            assert.ok(okButton, "OK button should exist in text input dialog");
 
             okButton.click();
             await new Promise((resolve) => setTimeout(resolve, 500));

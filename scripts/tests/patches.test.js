@@ -11,7 +11,6 @@ import {
   testCleanup,
   findClassItem,
   TestNumberer,
-  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -101,10 +100,8 @@ Hooks.on("quenchReady", (quench) => {
           const module = game.modules.get(TARGET_MODULE_ID);
           const Utils = module?.api?.Utils || globalThis.bitdAltSheets?.Utils;
 
-          if (!Utils?.isUsingAltSheets) {
-            skipWithReason(this, "Utils.isUsingAltSheets not exposed in API");
-            return;
-          }
+          assert.ok(Utils?.isUsingAltSheets,
+            "Utils.isUsingAltSheets should be exposed in module API");
 
           // Verify the actor is using alt sheets
           const usesAltSheets = Utils.isUsingAltSheets(actor);
@@ -117,10 +114,8 @@ Hooks.on("quenchReady", (quench) => {
           const module = game.modules.get(TARGET_MODULE_ID);
           const Utils = module?.api?.Utils || globalThis.bitdAltSheets?.Utils;
 
-          if (!Utils?.isEffectSuppressed) {
-            skipWithReason(this, "Utils.isEffectSuppressed not exposed in API");
-            return;
-          }
+          assert.ok(Utils?.isEffectSuppressed,
+            "Utils.isEffectSuppressed should be exposed in module API");
 
           // Create a mock disabled effect
           const mockEffect = {
@@ -139,10 +134,8 @@ Hooks.on("quenchReady", (quench) => {
           const module = game.modules.get(TARGET_MODULE_ID);
           const Utils = module?.api?.Utils || globalThis.bitdAltSheets?.Utils;
 
-          if (!Utils?.isEffectSuppressed) {
-            skipWithReason(this, "Utils.isEffectSuppressed not exposed in API");
-            return;
-          }
+          assert.ok(Utils?.isEffectSuppressed,
+            "Utils.isEffectSuppressed should be exposed in module API");
 
           // Create a mock effect with non-Actor parent
           const mockEffect = {
@@ -161,10 +154,8 @@ Hooks.on("quenchReady", (quench) => {
           const module = game.modules.get(TARGET_MODULE_ID);
           const Utils = module?.api?.Utils || globalThis.bitdAltSheets?.Utils;
 
-          if (!Utils?.isEffectSuppressed) {
-            skipWithReason(this, "Utils.isEffectSuppressed not exposed in API");
-            return;
-          }
+          assert.ok(Utils?.isEffectSuppressed,
+            "Utils.isEffectSuppressed should be exposed in module API");
 
           // Create a mock effect referencing a non-existent item
           const mockEffect = {
@@ -215,10 +206,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find a class default ability for Cutter
           const classDefault = await findClassDefaultAbility("Cutter");
-          if (!classDefault) {
-            skipWithReason(this, "No class default abilities found for Cutter playbook");
-            return;
-          }
+          assert.ok(classDefault,
+            "Class default abilities should be found for Cutter playbook - compendia may not be loaded");
 
           // Verify it's a class default
           assert.ok(
@@ -274,19 +263,15 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find any ability (preferably not a class default)
           const ability = await findAnyAbility();
-          if (!ability) {
-            skipWithReason(this, "No abilities found in compendia");
-            return;
-          }
+          assert.ok(ability,
+            "Abilities should be found in compendia - compendia may not be loaded");
 
-          // Skip if this IS a class default for our playbook
-          if (
+          // Verify this is NOT a class default for our playbook
+          const isThisPlaybooksClassDefault =
             ability.system?.class_default === true &&
-            ability.system?.class?.toLowerCase() === "cutter"
-          ) {
-            skipWithReason(this, "Found ability is a Cutter class default - need a different ability for this test");
-            return;
-          }
+            ability.system?.class?.toLowerCase() === "cutter";
+          assert.ok(!isThisPlaybooksClassDefault,
+            "findAnyAbility should return a non-class-default ability - found a Cutter class default instead");
 
           // Add the ability
           const itemData = ability.toObject();
@@ -312,26 +297,14 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find a class default for a DIFFERENT playbook (not Cutter)
           const otherClassDefault = await findClassDefaultAbility("Lurk");
-          if (!otherClassDefault) {
-            // Try another playbook
-            const houndDefault = await findClassDefaultAbility("Hound");
-            if (!houndDefault) {
-              skipWithReason(this, "No class default abilities found for other playbooks");
-              return;
-            }
-          }
-
           const classDefault = otherClassDefault || await findClassDefaultAbility("Hound");
-          if (!classDefault) {
-            skipWithReason(this, "No class default abilities found for testing");
-            return;
-          }
+
+          assert.ok(classDefault,
+            "Class default abilities should be found for other playbooks (Lurk or Hound) - compendia may not be loaded");
 
           // Verify it's NOT for Cutter
-          if (classDefault.system?.class?.toLowerCase() === "cutter") {
-            skipWithReason(this, "Could only find Cutter class defaults");
-            return;
-          }
+          assert.ok(classDefault.system?.class?.toLowerCase() !== "cutter",
+            "Should find class defaults for non-Cutter playbooks - compendia may only contain Cutter abilities");
 
           // Add the ability (wrong playbook for our Cutter actor)
           const itemData = classDefault.toObject();
@@ -410,10 +383,8 @@ Hooks.on("quenchReady", (quench) => {
           const module = game.modules.get(TARGET_MODULE_ID);
           const Utils = module?.api?.Utils || globalThis.bitdAltSheets?.Utils;
 
-          if (!Utils) {
-            skipWithReason(this, "Utils not exposed in module API");
-            return;
-          }
+          assert.ok(Utils,
+            "Utils should be exposed in module API (via module.api.Utils or globalThis.bitdAltSheets.Utils)");
 
           // Check key methods exist
           const requiredMethods = [
@@ -510,10 +481,8 @@ Hooks.on("quenchReady", (quench) => {
           const module = game.modules.get(TARGET_MODULE_ID);
           const Utils = module?.api?.Utils || globalThis.bitdAltSheets?.Utils;
 
-          if (!Utils?.isEffectSuppressed) {
-            skipWithReason(this, "Utils.isEffectSuppressed not exposed in API");
-            return;
-          }
+          assert.ok(Utils?.isEffectSuppressed,
+            "Utils.isEffectSuppressed should be exposed in module API");
 
           // Test with null origin
           const mockEffectNullOrigin = {

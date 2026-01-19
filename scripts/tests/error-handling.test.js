@@ -12,7 +12,6 @@ import {
   expectedTestError,
   TestNumberer,
   assertExists,
-  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -98,6 +97,35 @@ function findAbilityCheckboxes(root) {
   return root.querySelectorAll(
     ".crew-ability-checkbox, .ability-checkbox, input[type='checkbox'][data-ability]"
   );
+}
+
+/**
+ * Trigger a change event on a crew checkbox using the sheet's jQuery context.
+ * This is required because event handlers are bound via jQuery delegation on sheet.element.
+ * @param {ActorSheet} sheet - The sheet containing the checkbox
+ * @param {HTMLInputElement} checkbox - The checkbox element
+ */
+function triggerCrewCheckboxChange(sheet, checkbox) {
+  const sheetEl = sheet.element;
+  const itemName = checkbox.dataset?.itemName ||
+                   checkbox.closest("[data-item-name]")?.dataset?.itemName;
+  const slot = checkbox.dataset?.upgradeSlot;
+
+  // Toggle the checkbox state first
+  checkbox.checked = !checkbox.checked;
+
+  if (checkbox.classList.contains("crew-ability-checkbox") && itemName) {
+    $(sheetEl).find(`.crew-ability-checkbox[data-item-name="${itemName}"]`).trigger("change");
+  } else if (checkbox.classList.contains("crew-upgrade-checkbox") && itemName && slot) {
+    $(sheetEl).find(`.crew-upgrade-checkbox[data-item-name="${itemName}"][data-upgrade-slot="${slot}"]`).trigger("change");
+  } else if (checkbox.classList.contains("crew-upgrade-checkbox") && itemName) {
+    $(sheetEl).find(`.crew-upgrade-checkbox[data-item-name="${itemName}"]`).trigger("change");
+  } else if (checkbox.id) {
+    $(sheetEl).find(`#${CSS.escape(checkbox.id)}`).trigger("change");
+  } else {
+    // Fallback: native event
+    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+  }
 }
 
 /**
@@ -195,10 +223,9 @@ Hooks.on("quenchReady", (quench) => {
 
           const inlineFields = findInlineEditFields(root);
 
-          if (inlineFields.length === 0) {
-            skipWithReason(this, "Optional feature: inline edit fields not present in this sheet configuration");
-            return;
-          }
+          // Cutter character sheet should have inline edit fields in edit mode
+          assert.ok(inlineFields.length > 0,
+            "Cutter sheet should have inline edit fields in edit mode - template may be broken");
 
           const errorsBefore = consoleTracker.errors.length;
 
@@ -245,10 +272,9 @@ Hooks.on("quenchReady", (quench) => {
 
           const radioToggles = findRadioToggles(root);
 
-          if (radioToggles.length === 0) {
-            skipWithReason(this, "Optional feature: radio toggles not present in this sheet configuration");
-            return;
-          }
+          // Cutter character sheet should have radio toggles (XP teeth, action ratings)
+          assert.ok(radioToggles.length > 0,
+            "Cutter sheet should have radio toggles (XP teeth) - template may be broken");
 
           const errorsBefore = consoleTracker.errors.length;
 
@@ -338,7 +364,7 @@ Hooks.on("quenchReady", (quench) => {
             const checkbox = checkboxes[0];
             abilityName = checkbox.dataset?.itemName ||
                           checkbox.closest("[data-item-name]")?.dataset?.itemName;
-            checkbox.click();
+            triggerCrewCheckboxChange(sheet, checkbox);
             await new Promise((resolve) => setTimeout(resolve, 500));
           }
 
@@ -373,11 +399,10 @@ Hooks.on("quenchReady", (quench) => {
           }
         });
 
-        t.test("failed upgrade toggle shows user notification", async function () {
+        t.test("upgrade toggle operates without error notifications", async function () {
           this.timeout(10000);
 
-          // This test verifies error handling exists - we can't easily force a failure
-          // Instead, we verify the notification system is in place
+          const notificationsBefore = notificationTracker.notifications.length;
 
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
@@ -391,25 +416,52 @@ Hooks.on("quenchReady", (quench) => {
 
           const upgradeCheckboxes = findUpgradeCheckboxes(root);
 
-          if (upgradeCheckboxes.length === 0) {
-            skipWithReason(this, "Crew-type-specific: upgrade checkboxes not present for this crew type");
-            return;
-          }
+          // Assassins crew should have upgrade checkboxes
+          assert.ok(upgradeCheckboxes.length > 0,
+            "Assassins crew sheet should have upgrade checkboxes - template or crew type setup may be broken");
 
-          // Interact with upgrade (should succeed, but error handling exists)
+          // Get upgrade info for verification
           const checkbox = upgradeCheckboxes[0];
-          checkbox.click();
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          const upgradeName = checkbox.dataset?.itemName ||
+                              checkbox.closest("[data-item-name]")?.dataset?.itemName;
 
-          // The notification system should be available for errors
-          assert.ok(
-            typeof ui.notifications.error === "function",
-            "Error notification system should be available"
+          // Capture state before action
+          const flagsBefore = actor.getFlag(TARGET_MODULE_ID, "crewUpgradeProgress") || {};
+
+          // Interact with upgrade
+          triggerCrewCheckboxChange(sheet, checkbox);
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Verify no error notifications occurred
+          const errorNotifications = notificationTracker.notifications
+            .slice(notificationsBefore)
+            .filter((n) => n.type === "error");
+
+          assert.equal(
+            errorNotifications.length,
+            0,
+            "Upgrade toggle should not trigger error notifications"
           );
+
+          // Verify state changed - either upgrade progress increased or item was created
+          const flagsAfter = actor.getFlag(TARGET_MODULE_ID, "crewUpgradeProgress") || {};
+          const hasNewItem = actor.items.some(i => i.type === "crew_upgrade" && i.name === upgradeName);
+          const progressChanged = JSON.stringify(flagsAfter) !== JSON.stringify(flagsBefore);
+
+          assert.ok(
+            hasNewItem || progressChanged,
+            `Upgrade toggle should change state - either create item "${upgradeName}" or update progress flags`
+          );
+
+          console.log(`[ErrorHandling Test] Upgrade toggle: hasNewItem=${hasNewItem}, progressChanged=${progressChanged}`);
         });
 
-        t.test("failed ability toggle shows user notification", async function () {
+        t.test("ability toggle operates without error notifications", async function () {
           this.timeout(10000);
+
+          const notificationsBefore = notificationTracker.notifications.length;
+          const itemCountBefore = actor.items.size;
 
           const sheet = await ensureSheet(actor);
           const root = sheet.element?.[0] || sheet.element;
@@ -423,21 +475,48 @@ Hooks.on("quenchReady", (quench) => {
 
           const abilityCheckboxes = findAbilityCheckboxes(root);
 
-          if (abilityCheckboxes.length === 0) {
-            skipWithReason(this, "Crew-type-specific: ability checkboxes not present for this crew type");
-            return;
-          }
+          // Assassins crew should have ability checkboxes
+          assert.ok(abilityCheckboxes.length > 0,
+            "Assassins crew sheet should have ability checkboxes - template or crew type setup may be broken");
+
+          // Get ability info for verification
+          const checkbox = abilityCheckboxes[0];
+          const abilityName = checkbox.dataset?.itemName ||
+                              checkbox.closest("[data-item-name]")?.dataset?.itemName;
 
           // Interact with ability
-          const checkbox = abilityCheckboxes[0];
-          checkbox.click();
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          triggerCrewCheckboxChange(sheet, checkbox);
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 300));
 
-          // The notification system should be available for errors
-          assert.ok(
-            typeof ui.notifications.error === "function",
-            "Error notification system should be available for ability failures"
+          // Verify no error notifications occurred
+          const errorNotifications = notificationTracker.notifications
+            .slice(notificationsBefore)
+            .filter((n) => n.type === "error");
+
+          assert.equal(
+            errorNotifications.length,
+            0,
+            "Ability toggle should not trigger error notifications"
           );
+
+          // Verify state changed - item count should increase
+          const itemCountAfter = actor.items.size;
+          assert.ok(
+            itemCountAfter > itemCountBefore,
+            `Ability toggle should create item (was ${itemCountBefore}, now ${itemCountAfter})`
+          );
+
+          // Verify specific ability was created if we know its name
+          if (abilityName) {
+            const hasAbility = actor.items.some(i => i.type === "crew_ability" && i.name === abilityName);
+            assert.ok(
+              hasAbility,
+              `Actor should now have ability "${abilityName}" in actor.items`
+            );
+          }
+
+          console.log(`[ErrorHandling Test] Ability toggle: items ${itemCountBefore} → ${itemCountAfter}`);
         });
       });
 

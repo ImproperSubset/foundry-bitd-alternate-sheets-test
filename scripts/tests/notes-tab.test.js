@@ -12,7 +12,6 @@ import {
   testCleanup,
   TestNumberer,
   assertExists,
-  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -300,10 +299,8 @@ Hooks.on("quenchReady", (quench) => {
           const module = game.modules.get(TARGET_MODULE_ID);
           const Utils = module?.api?.Utils || globalThis.bitdAltSheets?.Utils;
 
-          if (!Utils?.enrichNotes) {
-            skipWithReason(this, "Utils.enrichNotes not exposed in module API");
-            return;
-          }
+          assert.ok(Utils?.enrichNotes,
+            "Utils.enrichNotes should be exposed in module API");
 
           assert.ok(
             typeof Utils.enrichNotes === "function",
@@ -474,10 +471,8 @@ Hooks.on("quenchReady", (quench) => {
         t.test("notes can contain clock @UUID references", async function () {
           this.timeout(10000);
 
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           // Set notes with clock UUID
           const testContent = `Progress: @UUID[Actor.${clockActor.id}]{Test Clock}`;
@@ -494,10 +489,8 @@ Hooks.on("quenchReady", (quench) => {
         t.test("clock links in notes are replaced with visualizations", async function () {
           this.timeout(15000);
 
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           // Set notes with clock reference
           const testContent = `Progress: @UUID[Actor.${clockActor.id}]{Test Clock}`;
@@ -517,10 +510,8 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const notesArea = findNotesArea(root);
-          if (!notesArea) {
-            skipWithReason(this, "Notes area not found after tab switch");
-            return;
-          }
+          assert.ok(notesArea,
+            "Notes area should exist after tab switch - template may be broken");
 
           // Check for clock visualization (SVG or clock container)
           const clockViz = notesArea.querySelector(
@@ -538,10 +529,8 @@ Hooks.on("quenchReady", (quench) => {
         t.test("updating clock actor triggers notes re-render", async function () {
           this.timeout(15000);
 
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           // Set notes with clock reference
           const testContent = `Progress: @UUID[Actor.${clockActor.id}]{Test Clock}`;
@@ -613,8 +602,8 @@ Hooks.on("quenchReady", (quench) => {
 
           const savedNotes = await getRawNotes(actor);
           assert.ok(
-            savedNotes.includes("Safe content") || savedNotes.length > 0,
-            "Notes with HTML should be stored (may be sanitized)"
+            savedNotes.includes("Safe"),
+            `Notes should preserve safe content (got: "${savedNotes.substring(0, 50)}...")`
           );
 
           // Render sheet to verify no script execution

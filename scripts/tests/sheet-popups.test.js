@@ -11,7 +11,6 @@ import {
   testCleanup,
   TestNumberer,
   assertExists,
-  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -83,6 +82,67 @@ function isItemSelected(itemEl) {
  */
 function getEquippedItems(actor) {
   return actor.getFlag(TARGET_MODULE_ID, "equipped-items") || {};
+}
+
+/**
+ * Trigger a mousedown event on a label using the sheet's jQuery context.
+ * This is required because radio-toggle controls use jQuery event delegation.
+ * @param {ActorSheet} sheet - The sheet containing the label
+ * @param {HTMLLabelElement} label - The label element
+ */
+function triggerLabelMousedown(sheet, label) {
+  const forAttr = label.getAttribute("for");
+  const sheetEl = sheet.element;
+  if (forAttr) {
+    $(sheetEl).find(`label[for="${forAttr}"]`).trigger("mousedown");
+  } else {
+    // Fallback: native event
+    label.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  }
+}
+
+/**
+ * Trigger a change event on an input/select using the sheet's jQuery context.
+ * @param {ActorSheet} sheet - The sheet containing the element
+ * @param {HTMLElement} element - The input or select element
+ */
+function triggerChangeEvent(sheet, element) {
+  const sheetEl = sheet.element;
+  const name = element.name;
+  const id = element.id;
+
+  if (name) {
+    $(sheetEl).find(`[name="${name}"]`).trigger("change");
+  } else if (id) {
+    $(sheetEl).find(`#${CSS.escape(id)}`).trigger("change");
+  } else {
+    // Fallback: native event
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
+/**
+ * Trigger a checkbox click using the sheet's jQuery context.
+ * @param {ActorSheet} sheet - The sheet containing the checkbox
+ * @param {HTMLInputElement} checkbox - The checkbox element
+ * @param {string} itemId - Optional item ID for item checkboxes
+ */
+function triggerCheckboxChange(sheet, checkbox, itemId) {
+  const sheetEl = sheet.element;
+
+  // Toggle the checked state
+  checkbox.checked = !checkbox.checked;
+
+  if (itemId) {
+    $(sheetEl).find(`.item-block[data-item-id="${itemId}"] input[type="checkbox"]`).trigger("change");
+  } else if (checkbox.id) {
+    $(sheetEl).find(`#${CSS.escape(checkbox.id)}`).trigger("change");
+  } else if (checkbox.name) {
+    $(sheetEl).find(`input[name="${checkbox.name}"]`).trigger("change");
+  } else {
+    // Fallback
+    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+  }
 }
 
 Hooks.on("quenchReady", (quench) => {
@@ -157,9 +217,8 @@ Hooks.on("quenchReady", (quench) => {
           }
           await new Promise(r => setTimeout(r, 100));
 
-          // Note: Toggle behavior - clicking should close
-          // But clicking inside full-view doesn't close
-          // This tests the basic toggle
+          // Verify popup is now closed - toggle behavior should close on second click
+          assert.ok(!isPopupOpen(coinsBox), "Popup should be closed after second click");
         });
 
         t.test("coins popup contains coin hand controls", async function () {
@@ -212,14 +271,13 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find a coin input with value "2" and click its label
           const coinLabel = fullView.querySelector('label[for*="coins"][for*="hands-2"]');
-          if (!coinLabel) {
-            skipWithReason(this, "Coin label selector not found in popup DOM");
-            return;
-          }
+          // Coin popup should have coin hand labels - template may be broken
+          assert.ok(coinLabel,
+            "Coin label for hands-2 should exist in popup DOM - check template selector");
 
           const initialCoins = actor.system.coins || 0;
           // radio-toggle controls use mousedown, not click
-          coinLabel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+          triggerLabelMousedown(sheet, coinLabel);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
 
@@ -247,14 +305,13 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find a stash input with value "5" and click its label
           const stashLabel = fullView.querySelector('label[for*="stashed-5"]');
-          if (!stashLabel) {
-            skipWithReason(this, "Stash label selector not found in popup DOM");
-            return;
-          }
+          // Coin popup should have stash labels - template may be broken
+          assert.ok(stashLabel,
+            "Stash label for stashed-5 should exist in popup DOM - check template selector");
 
           const initialStash = actor.system.coins_stashed || 0;
           // radio-toggle controls use mousedown, not click
-          stashLabel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+          triggerLabelMousedown(sheet, stashLabel);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
 
@@ -305,13 +362,12 @@ Hooks.on("quenchReady", (quench) => {
 
           // Set coins to a specific value (click label for value 3)
           const coinLabel = fullView.querySelector('label[for*="coins"][for*="hands-3"]');
-          if (!coinLabel) {
-            skipWithReason(this, "Coin label for value 3 not found in popup");
-            return;
-          }
+          // Coin popup should have coin hand labels - template may be broken
+          assert.ok(coinLabel,
+            "Coin label for hands-3 should exist in popup DOM for persistence test");
 
           // radio-toggle controls use mousedown, not click
-          coinLabel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+          triggerLabelMousedown(sheet, coinLabel);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
 
@@ -357,13 +413,12 @@ Hooks.on("quenchReady", (quench) => {
 
           // Set stash to a specific value
           const stashLabel = fullView.querySelector('label[for*="stashed-10"]');
-          if (!stashLabel) {
-            skipWithReason(this, "Stash label for value 10 not found in popup");
-            return;
-          }
+          // Coin popup should have stash labels - template may be broken
+          assert.ok(stashLabel,
+            "Stash label for stashed-10 should exist in popup DOM for persistence test");
 
           // radio-toggle controls use mousedown, not click
-          stashLabel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+          triggerLabelMousedown(sheet, stashLabel);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
 
@@ -410,7 +465,7 @@ Hooks.on("quenchReady", (quench) => {
             }
 
             // radio-toggle controls use mousedown, not click
-            coinLabel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+            triggerLabelMousedown(sheet, coinLabel);
             await waitForActorUpdate(actor, { timeoutMs: 1500 }).catch(() => {});
             await new Promise(r => setTimeout(r, 200));
 
@@ -452,31 +507,44 @@ Hooks.on("quenchReady", (quench) => {
 
           // Click stash value 5
           const stashLabel5 = fullView.querySelector('label[for*="stashed-5"]');
-          if (!stashLabel5) {
-            skipWithReason(this, "Stash label for value 5 not found");
-            return;
-          }
+          // Coin popup should have stash labels - template may be broken
+          assert.ok(stashLabel5,
+            "Stash label for stashed-5 should exist in popup DOM for increment test");
 
           // radio-toggle controls use mousedown, not click
-          stashLabel5.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+          triggerLabelMousedown(sheet, stashLabel5);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
 
           const after5 = actor.system.coins_stashed;
           assert.equal(after5, 5, `Stash should be 5 (got ${after5})`);
 
-          // Click stash value 10 - radio-toggle uses mousedown
-          const stashLabel10 = fullView.querySelector('label[for*="stashed-10"]');
-          if (stashLabel10) {
-            stashLabel10.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-            await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
-            await new Promise(r => setTimeout(r, 300));
+          // Sheet re-renders after actor update - need to re-query everything from fresh root
+          const freshRoot = sheet.element?.[0] || sheet.element;
+          const freshCoinsBox = findCoinsBox(freshRoot);
+          assertExists(assert, freshCoinsBox, "Coins box should exist after re-render");
 
-            const after10 = actor.system.coins_stashed;
-            assert.equal(after10, 10, `Stash should be 10 (got ${after10})`);
+          // Check if popup is still open, if not reopen it
+          let freshFullView = freshCoinsBox.querySelector(".full-view");
+          if (!freshFullView) {
+            freshCoinsBox.click();
+            await new Promise(r => setTimeout(r, 100));
+            freshFullView = freshCoinsBox.querySelector(".full-view");
           }
+          assertExists(assert, freshFullView, "Full-view should exist after reopening");
 
-          console.log(`[SheetPopups Test] Stash progression: 0 -> ${after5} -> ${actor.system.coins_stashed}`);
+          // Now find and click stash-10 on refreshed DOM
+          const stashLabel10 = freshFullView.querySelector('label[for*="stashed-10"]');
+          assertExists(assert, stashLabel10, "Stash label 10 should exist in popup");
+
+          triggerLabelMousedown(sheet, stashLabel10);
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise(r => setTimeout(r, 300));
+
+          const after10 = actor.system.coins_stashed;
+          assert.equal(after10, 10, `Stash should be 10 (got ${after10})`);
+
+          console.log(`[SheetPopups Test] Stash progression: 0 -> ${after5} -> ${after10}`);
         });
       });
 
@@ -588,14 +656,13 @@ Hooks.on("quenchReady", (quench) => {
           const fullView = harmBox.querySelector(".full-view");
           const lightHarmInput = fullView.querySelector('input[name="system.harm.light.one"]');
 
-          if (!lightHarmInput) {
-            skipWithReason(this, "Light harm input selector not found in popup DOM");
-            return;
-          }
+          // Harm popup should have light harm input - template may be broken
+          assert.ok(lightHarmInput,
+            "Light harm input should exist in popup DOM - check template selector");
 
           // Set a harm value
           lightHarmInput.value = "Bruised";
-          lightHarmInput.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerChangeEvent(sheet, lightHarmInput);
 
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
@@ -617,13 +684,12 @@ Hooks.on("quenchReady", (quench) => {
           const fullView = harmBox.querySelector(".full-view");
           const armorCheckbox = fullView.querySelector('input[name="system.armor-uses.armor"]');
 
-          if (!armorCheckbox) {
-            skipWithReason(this, "Armor checkbox selector not found in popup DOM");
-            return;
-          }
+          // Harm popup should have armor checkbox - template may be broken
+          assert.ok(armorCheckbox,
+            "Armor checkbox should exist in popup DOM - check template selector");
 
           const initialState = armorCheckbox.checked;
-          armorCheckbox.click();
+          triggerCheckboxChange(sheet, armorCheckbox);
 
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
@@ -702,10 +768,9 @@ Hooks.on("quenchReady", (quench) => {
           const fullView = loadBox.querySelector(".full-view");
           const loadSelector = fullView.querySelector('select[name="system.selected_load_level"]');
 
-          if (!loadSelector) {
-            skipWithReason(this, "Load selector not found in popup DOM");
-            return;
-          }
+          // Load popup should have load selector - template may be broken
+          assert.ok(loadSelector,
+            "Load selector should exist in popup DOM for options test - check template selector");
 
           const options = loadSelector.options;
           assert.ok(
@@ -727,10 +792,9 @@ Hooks.on("quenchReady", (quench) => {
           const fullView = loadBox.querySelector(".full-view");
           const loadSelector = fullView.querySelector('select[name="system.selected_load_level"]');
 
-          if (!loadSelector) {
-            skipWithReason(this, "Load selector not found in popup DOM");
-            return;
-          }
+          // Load popup should have load selector - template may be broken
+          assert.ok(loadSelector,
+            "Load selector should exist in popup DOM for persistence test - check template selector");
 
           const initialValue = loadSelector.value;
 
@@ -738,13 +802,12 @@ Hooks.on("quenchReady", (quench) => {
           const options = Array.from(loadSelector.options);
           const differentOption = options.find(opt => opt.value !== initialValue);
 
-          if (!differentOption) {
-            skipWithReason(this, "Only one load option available in selector");
-            return;
-          }
+          // Blades system should have multiple load options (Light, Normal, Heavy)
+          assert.ok(differentOption,
+            "Load selector should have at least 2 options (Light/Normal/Heavy) - system data may be broken");
 
           loadSelector.value = differentOption.value;
-          loadSelector.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerChangeEvent(sheet, loadSelector);
 
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
@@ -784,10 +847,9 @@ Hooks.on("quenchReady", (quench) => {
 
           // clearLoad button is only visible in debug mode (GM only)
           const debugToggle = root.querySelector(".debug-toggle");
-          if (!debugToggle) {
-            skipWithReason(this, "Debug toggle not found - requires GM permissions");
-            return;
-          }
+          // Debug toggle should exist for GM users - test assumes GM permissions
+          assert.ok(debugToggle,
+            "Debug toggle should exist - test requires GM permissions or toggle may not render");
 
           // Enable debug mode
           debugToggle.click();
@@ -807,10 +869,9 @@ Hooks.on("quenchReady", (quench) => {
 
           // clearLoad button is only visible in debug mode (GM only)
           const debugToggle = root.querySelector(".debug-toggle");
-          if (!debugToggle) {
-            skipWithReason(this, "Debug toggle not found - requires GM permissions");
-            return;
-          }
+          // Debug toggle should exist for GM users - test assumes GM permissions
+          assert.ok(debugToggle,
+            "Debug toggle should exist - test requires GM permissions or toggle may not render");
 
           // Enable debug mode
           debugToggle.click();
@@ -833,7 +894,13 @@ Hooks.on("quenchReady", (quench) => {
             if (!isItemSelected(item) && equippedCount < 2) {
               const checkbox = item.querySelector("input[type='checkbox']");
               if (checkbox) {
-                checkbox.click();
+                // Use sheet's jQuery context for event delegation
+                const checkboxId = checkbox.id;
+                if (checkboxId) {
+                  $(sheet.element).find(`#${CSS.escape(checkboxId)}`).trigger("change");
+                } else {
+                  checkbox.click();
+                }
                 equippedCount++;
                 await waitForActorUpdate(actor, { timeoutMs: 1500 }).catch(() => {});
                 await new Promise(r => setTimeout(r, 200));
@@ -841,10 +908,9 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
-          if (equippedCount === 0) {
-            skipWithReason(this, "No equippable gear items found on sheet");
-            return;
-          }
+          // Cutter playbook should have equippable gear items
+          assert.ok(equippedCount > 0,
+            "Fresh Cutter actor should have equippable gear items - test setup or playbook data may be broken");
 
           // Verify items are equipped
           let equipped = getEquippedItems(actor);

@@ -15,7 +15,6 @@ import {
   waitForClockInChat,
   TestNumberer,
   assertExists,
-  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -181,11 +180,8 @@ Hooks.on("quenchReady", (quench) => {
           this.timeout(5000);
           clockActor = await createClockActor({ name: "Test Clock 4.1.0" });
 
-          // NOTE: Clock actor type depends on system configuration - legitimate skip if unavailable
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           assert.ok(clockActor, "Clock actor should be created");
           assert.ok(
@@ -198,10 +194,8 @@ Hooks.on("quenchReady", (quench) => {
           this.timeout(8000);
           clockActor = await createClockActor({ name: "Test Clock 4.1.1", type: 4, value: 2 });
 
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           chatMessage = await createClockChatMessage(clockActor);
           assert.ok(chatMessage, "Chat message creation should succeed");
@@ -231,10 +225,8 @@ Hooks.on("quenchReady", (quench) => {
           // Create clock at value 2
           clockActor = await createClockActor({ name: "Test Clock Snapshot", type: 4, value: 2 });
 
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           // Create message with current value
           chatMessage = await createClockChatMessage(clockActor);
@@ -270,10 +262,8 @@ Hooks.on("quenchReady", (quench) => {
           // Create clock at value 1
           clockActor = await createClockActor({ name: "Test Clock Snapshot Click", type: 4, value: 1 });
 
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           // CRITICAL: Capture initial value before any interaction
           const initialValue = clockActor.system?.value;
@@ -354,10 +344,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Create clock actor first
           clockActor = await createClockActor({ name: "Notes Tab Clock", type: 4, value: 1 });
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           // Create character with clock reference in notes
           const result = await createTestActor({
@@ -407,10 +395,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Create clock actor
           clockActor = await createClockActor({ name: "Notes Click Clock", type: 4, value: 1 });
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           // Create character with clock reference in notes
           const result = await createTestActor({
@@ -437,10 +423,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find the clock in Notes tab specifically
           const clockEl = root.querySelector('[data-tab="notes"] .blades-clock');
-          if (!clockEl) {
-            skipWithReason(this, "Clock enrichment not active in Notes tab");
-            return;
-          }
+          assert.ok(clockEl,
+            "Clock should render in Notes tab - enrichment may not be active");
 
           // CRITICAL: Capture initial value
           const initialValue = clockActor.system?.value;
@@ -477,10 +461,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Create clock actor
           clockActor = await createClockActor({ name: "Crew Notes Clock", type: 6, value: 2 });
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           // Create crew actor
           actor = await Actor.create({
@@ -689,10 +671,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Create clock actor
           clockActor = await createClockActor({ name: "Journal Clock", type: 4, value: 1 });
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           // Create journal with clock reference
           journal = await JournalEntry.create({
@@ -712,11 +692,8 @@ Hooks.on("quenchReady", (quench) => {
           // Use helper to get journal sheet element (handles V12/V13 differences)
           const root = await getJournalSheetElement(journal);
 
-          // NOTE: Journal sheet element may not be found in all Foundry versions - legitimate skip
-          if (!root) {
-            skipWithReason(this, "Requires Foundry V13+ (DocumentSheetV2 API for journals)");
-            return;
-          }
+          assert.ok(root,
+            "Journal sheet element should be accessible - getJournalSheetElement helper may need updating");
 
           console.log("[GlobalClocks Test] Journal root found:", root.tagName, root.className);
 
@@ -748,10 +725,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Create clock actor
           clockActor = await createClockActor({ name: "Journal Click Clock", type: 4, value: 1 });
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           // Create journal with clock reference
           journal = await JournalEntry.create({
@@ -771,18 +746,13 @@ Hooks.on("quenchReady", (quench) => {
           // Use helper to get journal sheet element (handles V12/V13 differences)
           const root = await getJournalSheetElement(journal);
 
-          // NOTE: Journal sheet element may not be found in all Foundry versions - legitimate skip
-          if (!root) {
-            skipWithReason(this, "Requires Foundry V13+ (DocumentSheetV2 API for journals)");
-            return;
-          }
+          assert.ok(root,
+            "Journal sheet element should be accessible - getJournalSheetElement helper may need updating");
 
           // Wait for clock enrichment (V13 async @UUID enrichment + replaceClockLinks)
           const clockEl = await waitForClockElement(root, { timeoutMs: 3000 });
-          if (!clockEl) {
-            skipWithReason(this, "Clock enrichment not active in journals");
-            return;
-          }
+          assert.ok(clockEl,
+            "Clock should render in journal - enrichment may not be active");
 
           // CRITICAL: Capture initial value
           const initialValue = clockActor.system?.value;
@@ -819,10 +789,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Create clock at value 3
           clockActor = await createClockActor({ name: "Journal Decrement Clock", type: 4, value: 3 });
-          if (!clockActor) {
-            skipWithReason(this, "Clock actor type not available in system");
-            return;
-          }
+          assert.ok(clockActor,
+            "Clock actor should be created - clock actor type must be available in system");
 
           // Create journal
           journal = await JournalEntry.create({
@@ -842,18 +810,13 @@ Hooks.on("quenchReady", (quench) => {
           // Use helper to get journal sheet element (handles V12/V13 differences)
           const root = await getJournalSheetElement(journal);
 
-          // NOTE: Journal sheet element may not be found in all Foundry versions - legitimate skip
-          if (!root) {
-            skipWithReason(this, "Requires Foundry V13+ (DocumentSheetV2 API for journals)");
-            return;
-          }
+          assert.ok(root,
+            "Journal sheet element should be accessible - getJournalSheetElement helper may need updating");
 
           // Wait for clock enrichment (V13 async @UUID enrichment + replaceClockLinks)
           const clockEl = await waitForClockElement(root, { timeoutMs: 3000 });
-          if (!clockEl) {
-            skipWithReason(this, "Clock enrichment not active in journals");
-            return;
-          }
+          assert.ok(clockEl,
+            "Clock should render in journal - enrichment may not be active");
 
           const updatePromise = waitForActorUpdate(clockActor, { timeoutMs: 2000 }).catch(() => {});
           clockEl.dispatchEvent(new MouseEvent("contextmenu", {

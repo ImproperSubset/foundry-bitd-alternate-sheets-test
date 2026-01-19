@@ -15,7 +15,6 @@ import {
   TestNumberer,
   assertExists,
   assertNotEmpty,
-  isLegitimateSkip,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -62,6 +61,42 @@ function trackNotifications() {
 }
 
 const t = new TestNumberer("5");
+
+/**
+ * Trigger a mousedown event on an XP tooth input using jQuery context.
+ * This is required because event handlers are bound via jQuery delegation.
+ * @param {ActorSheet} sheet - The sheet containing the input
+ * @param {HTMLInputElement} input - The input element
+ */
+function triggerXpToothMousedown(sheet, input) {
+  const inputId = input.id;
+  const sheetEl = sheet.element;
+  if (inputId) {
+    $(sheetEl).find(`#${CSS.escape(inputId)}`).trigger("mousedown");
+  } else {
+    // Fallback: native event
+    input.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  }
+}
+
+/**
+ * Trigger a change event on a crew checkbox using the sheet's jQuery context.
+ * @param {ActorSheet} sheet - The sheet containing the checkbox
+ * @param {HTMLInputElement} checkbox - The checkbox element
+ */
+function triggerCrewCheckboxChange(sheet, checkbox) {
+  const sheetEl = sheet.element;
+  const itemName = checkbox.dataset.itemName;
+
+  if (checkbox.classList.contains("crew-ability-checkbox") && itemName) {
+    $(sheetEl).find(`.crew-ability-checkbox[data-item-name="${itemName}"]`).trigger("change");
+  } else if (checkbox.id) {
+    $(sheetEl).find(`#${CSS.escape(checkbox.id)}`).trigger("change");
+  } else {
+    // Fallback: native event
+    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
 
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {
@@ -121,7 +156,7 @@ Hooks.on("quenchReady", (quench) => {
               if (input) {
                 clicks.push(
                   new Promise((resolve) => {
-                    input.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+                    triggerXpToothMousedown(sheet, input);
                     setTimeout(resolve, 10); // Very quick succession
                   })
                 );
@@ -206,7 +241,7 @@ Hooks.on("quenchReady", (quench) => {
               togglePromises.push(
                 new Promise((resolve) => {
                   checkboxes[i].checked = true;
-                  checkboxes[i].dispatchEvent(new Event("change", { bubbles: true }));
+                  triggerCrewCheckboxChange(sheet, checkboxes[i]);
                   setTimeout(resolve, 20);
                 })
               );
@@ -350,7 +385,7 @@ Hooks.on("quenchReady", (quench) => {
 
           const input = document.getElementById(label.getAttribute("for"));
           if (input) {
-            input.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+            triggerXpToothMousedown(sheet, input);
           }
 
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});

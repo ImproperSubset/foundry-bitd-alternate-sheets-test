@@ -10,7 +10,6 @@ import {
   isTargetModuleActive,
   testCleanup,
   TestNumberer,
-  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -118,11 +117,15 @@ Hooks.on("quenchReady", (quench) => {
           // Check if module has languages defined in manifest
           const languages = module.languages || [];
 
-          // At minimum, should have English
-          const hasEnglish = languages.some((l) => l.lang === "en");
-          assert.ok(hasEnglish || languages.length === 0,
-            "Module should have English language or use default registration"
-          );
+          // Two valid scenarios:
+          // 1. Module explicitly registers languages - English must be one of them
+          // 2. Module doesn't register languages - uses Foundry default handling
+          if (languages.length > 0) {
+            const hasEnglish = languages.some((l) => l.lang === "en");
+            assert.ok(hasEnglish,
+              `Module registers ${languages.length} languages but English is missing - available: ${languages.map(l => l.lang).join(", ")}`);
+          }
+          // If no languages registered, that's valid (uses default)
 
           console.log(`[i18n Test] Module has ${languages.length} registered language files`);
         });
@@ -134,10 +137,11 @@ Hooks.on("quenchReady", (quench) => {
           const attuneKey = "bitd-alt.Attributes.attune";
           const translated = game.i18n.localize(attuneKey);
 
-          // Should contain HTML formatting (from the translation)
-          assert.ok(
-            translated.includes("<strong>") || translated !== attuneKey,
-            "Attribute descriptions should be properly localized with HTML"
+          // Should be translated (not return the key itself)
+          assert.notStrictEqual(
+            translated,
+            attuneKey,
+            `Translation should differ from key (got: "${translated}")`
           );
         });
       });
@@ -237,8 +241,8 @@ Hooks.on("quenchReady", (quench) => {
           const hasNotesLabel = htmlContent.includes(notesLabel);
 
           assert.ok(
-            hasItemsLabel || hasNotesLabel || true,
-            "Sheet should contain localized labels"
+            hasItemsLabel || hasNotesLabel,
+            `Sheet should contain localized labels (items: ${hasItemsLabel}, notes: ${hasNotesLabel})`
           );
         });
 
@@ -249,10 +253,8 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
 
           const editToggle = root.querySelector(".toggle-allow-edit");
-          if (!editToggle) {
-            skipWithReason(this, "Edit toggle not found on sheet");
-            return;
-          }
+          assert.ok(editToggle,
+            "Edit toggle should exist on character sheet - template may be broken");
 
           // Check for title or aria-label attribute
           const title = editToggle.getAttribute("title") || "";

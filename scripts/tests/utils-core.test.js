@@ -12,7 +12,6 @@ import {
   findClassItem,
   testCleanup,
   TestNumberer,
-  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -68,6 +67,29 @@ function findAbilityItems(root) {
 function isItemSelected(itemEl) {
   const checkbox = itemEl.querySelector("input[type='checkbox']");
   return checkbox?.checked || false;
+}
+
+/**
+ * Trigger a change event on a gear checkbox using the sheet's jQuery context.
+ * This is required because event handlers are bound via jQuery delegation.
+ * @param {ActorSheet} sheet - The sheet containing the checkbox
+ * @param {HTMLInputElement} checkbox - The checkbox element
+ * @param {string} itemId - The item ID associated with the checkbox
+ */
+function triggerGearCheckboxChange(sheet, checkbox, itemId) {
+  const sheetEl = sheet.element;
+  // Change the checked state first
+  checkbox.checked = !checkbox.checked;
+
+  // Try to find and trigger via jQuery
+  if (itemId) {
+    $(sheetEl).find(`.item-block[data-item-id="${itemId}"] input[type="checkbox"]`).trigger("change");
+  } else if (checkbox.id) {
+    $(sheetEl).find(`#${CSS.escape(checkbox.id)}`).trigger("change");
+  } else {
+    // Fallback: native event
+    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+  }
 }
 
 Hooks.on("quenchReady", (quench) => {
@@ -196,10 +218,8 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const gearItems = findGearItems(root);
-          if (gearItems.length === 0) {
-            skipWithReason(this, "No gear items found on sheet");
-            return;
-          }
+          assert.ok(gearItems.length > 0,
+            "Gear items should be found on sheet - playbook may not have gear or template may be broken");
 
           // Find unequipped item
           let targetItem = null;
@@ -215,10 +235,8 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
-          if (!targetItem || !targetCheckbox) {
-            skipWithReason(this, "All items already equipped");
-            return;
-          }
+          assert.ok(targetItem && targetCheckbox,
+            "Should find at least one unequipped item with checkbox - test setup should ensure fresh actor state");
 
           const itemId = targetItem.dataset?.itemId;
           const initialEquipped = getEquippedItems(actor);
@@ -227,7 +245,7 @@ Hooks.on("quenchReady", (quench) => {
           assert.ok(!wasEquipped, `Item ${itemId} should not be equipped initially`);
 
           // Click to equip (triggers toggleOwnership)
-          targetCheckbox.click();
+          triggerGearCheckboxChange(sheet, targetCheckbox, itemId);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
 
@@ -252,10 +270,8 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const gearItems = findGearItems(root);
-          if (gearItems.length === 0) {
-            skipWithReason(this, "No gear items found on sheet");
-            return;
-          }
+          assert.ok(gearItems.length > 0,
+            "Gear items should be found on sheet - playbook may not have gear or template may be broken");
 
           // First equip an item
           let targetItem = null;
@@ -289,7 +305,7 @@ Hooks.on("quenchReady", (quench) => {
             }
           } else {
             // Equip first
-            targetCheckbox.click();
+            triggerGearCheckboxChange(sheet, targetCheckbox, itemId);
             await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
             await new Promise(r => setTimeout(r, 300));
 
@@ -308,10 +324,8 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
-          if (!targetCheckbox || !itemId) {
-            skipWithReason(this, "Could not set up equipped item for unequip test");
-            return;
-          }
+          assert.ok(targetCheckbox && itemId,
+            "Should be able to set up an equipped item for unequip test - test setup may have failed");
 
           // Verify item is now equipped
           let equipped = getEquippedItems(actor);
@@ -321,7 +335,7 @@ Hooks.on("quenchReady", (quench) => {
           );
 
           // Click to unequip
-          targetCheckbox.click();
+          triggerGearCheckboxChange(sheet, targetCheckbox, itemId);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
 
@@ -360,13 +374,11 @@ Hooks.on("quenchReady", (quench) => {
             }
           }
 
-          if (!targetCheckbox) {
-            skipWithReason(this, "No unequipped item found");
-            return;
-          }
+          assert.ok(targetCheckbox,
+            "Should find an unequipped item - test setup should ensure fresh actor state");
 
           // Equip the item
-          targetCheckbox.click();
+          triggerGearCheckboxChange(sheet, targetCheckbox, itemId);
           await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
           await new Promise(r => setTimeout(r, 300));
 
@@ -563,9 +575,19 @@ Hooks.on("quenchReady", (quench) => {
           const sheet = await ensureSheet(actor);
           let root = sheet.element?.[0] || sheet.element;
 
-          // Find ability checkboxes - guaranteed to exist with populateFromCompendia=true
+          // Enable edit mode first (required for some interactions)
+          const editToggle = root.querySelector(".toggle-allow-edit");
+          if (editToggle && !sheet.allow_edit) {
+            editToggle.click();
+            await new Promise(r => setTimeout(r, 200));
+          }
+
+          // Re-query root after edit mode toggle (sheet may re-render)
+          root = sheet.element?.[0] || sheet.element;
+
+          // Find ability checkboxes - use specific selector matching template structure
           const abilityCheckboxes = root.querySelectorAll(
-            ".ability-block input[type='checkbox'], .ability-checkbox"
+            ".ability-block .ability-checkbox:not([disabled])"
           );
 
           assert.ok(
@@ -573,21 +595,26 @@ Hooks.on("quenchReady", (quench) => {
             "Ability checkboxes should exist (populateFromCompendia is enabled)"
           );
 
-          // Enable edit mode
-          const editToggle = root.querySelector(".toggle-allow-edit");
-          if (editToggle && !sheet.allow_edit) {
-            editToggle.click();
-            await new Promise(r => setTimeout(r, 100));
-          }
-
           // Find an unowned ability and click to own it
           let ownedAbilityName = null;
+          let clickedCheckbox = null;
           for (const checkbox of abilityCheckboxes) {
             if (!checkbox.checked) {
-              const abilityBlock = checkbox.closest(".ability-block, .ability-item");
-              ownedAbilityName = abilityBlock?.dataset?.itemName ||
-                abilityBlock?.querySelector(".item-name")?.textContent?.trim();
-              checkbox.click();
+              const abilityBlock = checkbox.closest(".ability-block");
+              if (!abilityBlock) continue; // Skip if not in ability block
+              ownedAbilityName = abilityBlock.dataset?.abilityName;
+              if (!ownedAbilityName) continue; // Skip if no name
+              clickedCheckbox = checkbox;
+
+              // Get the checkbox ID and use sheet's jQuery context to trigger
+              const checkboxId = checkbox.id;
+              if (checkboxId) {
+                $(sheet.element).find(`#${CSS.escape(checkboxId)}`).trigger("change");
+              } else {
+                // Fallback: trigger via native click which changes state and fires change
+                checkbox.click();
+              }
+              console.log(`[Test 18.4.2] Triggered change on ability: ${ownedAbilityName}, slot: ${checkbox.dataset?.abilitySlot}`);
               break;
             }
           }
@@ -607,8 +634,8 @@ Hooks.on("quenchReady", (quench) => {
           );
 
           assert.ok(
-            found || ownedAbilities.length > 0,
-            `Owned ability "${ownedAbilityName}" should appear in actor items`
+            found,
+            `Owned ability "${ownedAbilityName}" should appear in actor items (found ${ownedAbilities.length} total)`
           );
 
           console.log(`[Utils-Core Test] Actor has ${ownedAbilities.length} owned abilities`);
@@ -621,16 +648,19 @@ Hooks.on("quenchReady", (quench) => {
           const sheet = await ensureSheet(actor);
           let root = sheet.element?.[0] || sheet.element;
 
-          // Enable edit mode
+          // Enable edit mode first
           const editToggle = root.querySelector(".toggle-allow-edit");
           if (editToggle && !sheet.allow_edit) {
             editToggle.click();
-            await new Promise(r => setTimeout(r, 100));
+            await new Promise(r => setTimeout(r, 200));
           }
 
-          // Find and click an ability to own it - guaranteed to exist with populateFromCompendia=true
+          // Re-query root after edit mode toggle
+          root = sheet.element?.[0] || sheet.element;
+
+          // Find and click an ability to own it - use specific selector
           const abilityCheckboxes = root.querySelectorAll(
-            ".ability-block input[type='checkbox'], .ability-checkbox"
+            ".ability-block .ability-checkbox:not([disabled])"
           );
 
           assert.ok(
@@ -641,9 +671,18 @@ Hooks.on("quenchReady", (quench) => {
           let clickedAbilityName = null;
           for (const checkbox of abilityCheckboxes) {
             if (!checkbox.checked) {
-              const block = checkbox.closest(".ability-block, .ability-item");
-              clickedAbilityName = block?.dataset?.itemName;
-              checkbox.click();
+              const block = checkbox.closest(".ability-block");
+              if (!block) continue;
+              clickedAbilityName = block.dataset?.abilityName;
+              if (!clickedAbilityName) continue;
+
+              // Use sheet's jQuery context to trigger event
+              const checkboxId = checkbox.id;
+              if (checkboxId) {
+                $(sheet.element).find(`#${CSS.escape(checkboxId)}`).trigger("change");
+              } else {
+                checkbox.click();
+              }
               break;
             }
           }

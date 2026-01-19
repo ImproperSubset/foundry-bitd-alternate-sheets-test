@@ -15,7 +15,6 @@ import {
   isTargetModuleActive,
   runTeethTest,
   TestNumberer,
-  isLegitimateSkip,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";

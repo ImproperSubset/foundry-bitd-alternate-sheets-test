@@ -85,6 +85,62 @@ function clickMinimizeToggle(root) {
 }
 
 /**
+ * Trigger a change event on a crew checkbox using the sheet's jQuery context.
+ * This is required because event handlers are bound via jQuery delegation.
+ * @param {ActorSheet} sheet - The sheet containing the checkbox
+ * @param {HTMLInputElement} checkbox - The checkbox element
+ */
+function triggerCrewCheckboxChange(sheet, checkbox) {
+  const sheetEl = sheet.element;
+  const itemName = checkbox.dataset.itemName;
+  const itemId = checkbox.dataset.itemId;
+  const turfId = checkbox.dataset.turfId;
+  const slot = checkbox.dataset.upgradeSlot;
+
+  // Try various selectors based on checkbox type
+  if (checkbox.classList.contains("crew-ability-checkbox") && itemName) {
+    $(sheetEl).find(`.crew-ability-checkbox[data-item-name="${itemName}"]`).trigger("change");
+  } else if (checkbox.classList.contains("crew-upgrade-checkbox") && itemName && slot) {
+    $(sheetEl).find(`.crew-upgrade-checkbox[data-item-name="${itemName}"][data-upgrade-slot="${slot}"]`).trigger("change");
+  } else if (checkbox.classList.contains("turf-select") && turfId) {
+    $(sheetEl).find(`.turf-select[data-turf-id="${turfId}"]`).trigger("change");
+  } else if (itemId) {
+    $(sheetEl).find(`[data-item-id="${itemId}"]`).trigger("change");
+  } else {
+    // Fallback: native event
+    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
+/**
+ * Trigger a blur event on an inline input using the sheet's jQuery context.
+ * @param {ActorSheet} sheet - The sheet containing the input
+ * @param {HTMLElement} input - The input element
+ */
+function triggerInlineBlur(sheet, input) {
+  const sheetEl = sheet.element;
+  const dataTarget = input.dataset.target;
+
+  if (dataTarget) {
+    $(sheetEl).find(`[data-target="${dataTarget}"]`).trigger("blur");
+  } else if (input.classList.contains("inline-input")) {
+    // Try to find by parent context
+    const parent = input.closest(".identity-name, .meta-value");
+    if (parent?.classList.contains("identity-name")) {
+      $(sheetEl).find(".identity-name .inline-input").trigger("blur");
+    } else if (parent?.classList.contains("meta-value")) {
+      $(sheetEl).find(".meta-value .inline-input").trigger("blur");
+    } else {
+      // Fallback
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+    }
+  } else {
+    // Fallback
+    input.dispatchEvent(new Event("blur", { bubbles: true }));
+  }
+}
+
+/**
  * Check if the sheet is in minimized state.
  * @param {ActorSheet} sheet
  * @returns {boolean}
@@ -187,7 +243,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Click to check
           checkbox.checked = true;
-          checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, checkbox);
 
           // Wait for update
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
@@ -215,7 +271,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Check it first
           checkbox.checked = true;
-          checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, checkbox);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -232,7 +288,7 @@ Hooks.on("quenchReady", (quench) => {
           assertExists(assert, newCheckbox, `Ability checkbox for "${abilityName}" should exist after re-render`);
 
           newCheckbox.checked = false;
-          newCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, newCheckbox);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -257,7 +313,7 @@ Hooks.on("quenchReady", (quench) => {
           const abilityName = checkbox.dataset.itemName;
 
           checkbox.checked = true;
-          checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, checkbox);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -306,7 +362,7 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           singleCostCheckbox.checked = true;
-          singleCostCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, singleCostCheckbox);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -345,7 +401,7 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           multiCostCheckbox.checked = true;
-          multiCostCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, multiCostCheckbox);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -392,7 +448,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Click first slot
           firstSlot.checked = true;
-          firstSlot.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, firstSlot);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -408,7 +464,7 @@ Hooks.on("quenchReady", (quench) => {
           assertExists(assert, newSecondSlot, `Second slot for upgrade "${upgradeName}" should exist after re-render`);
 
           newSecondSlot.checked = true;
-          newSecondSlot.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, newSecondSlot);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -586,29 +642,24 @@ Hooks.on("quenchReady", (quench) => {
           // Find an unchecked turf checkbox
           const turfCheckboxes = root.querySelectorAll(".turf-select:not(:checked)");
 
-          // NOTE: Turf availability depends on crew type - legitimate skip if none
-          if (turfCheckboxes.length === 0) {
-            console.log("[CrewSheet Test] No unchecked turf checkboxes found");
-            this.skip();
-            return;
-          }
+          // Assassins crew type should have turfs - verify test setup is correct
+          assert.ok(turfCheckboxes.length > 0,
+            "Assassins crew should have unchecked turf checkboxes - test setup or template may be broken");
 
           const turfCheckbox = turfCheckboxes[0];
           const turfId = turfCheckbox.dataset.turfId;
 
           // Click to check the turf
           turfCheckbox.checked = true;
-          turfCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, turfCheckbox);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
           // Find the crew_type item to verify turf state
           const crewTypeItem = actor.items.find((i) => i.type === "crew_type");
-          if (!crewTypeItem) {
-            console.log("[CrewSheet Test] No crew_type item found");
-            this.skip();
-            return;
-          }
+          // crew_type item should exist since we set up the crew with Assassins type
+          assert.ok(crewTypeItem,
+            "Crew should have crew_type item - test setup with Assassins type may have failed");
 
           // Verify turf is now selected
           const turfValue = crewTypeItem.system?.turfs?.[turfId]?.value;
@@ -630,19 +681,16 @@ Hooks.on("quenchReady", (quench) => {
           // Find an unchecked turf checkbox
           const turfCheckboxes = root.querySelectorAll(".turf-select:not(:checked)");
 
-          // NOTE: Turf availability depends on crew type - legitimate skip if none
-          if (turfCheckboxes.length === 0) {
-            console.log("[CrewSheet Test] No unchecked turf checkboxes found");
-            this.skip();
-            return;
-          }
+          // Assassins crew type should have turfs - verify test setup is correct
+          assert.ok(turfCheckboxes.length > 0,
+            "Assassins crew should have unchecked turf checkboxes for persistence test - test setup or template may be broken");
 
           const turfCheckbox = turfCheckboxes[0];
           const turfId = turfCheckbox.dataset.turfId;
 
           // Click to check the turf
           turfCheckbox.checked = true;
-          turfCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, turfCheckbox);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -678,16 +726,14 @@ Hooks.on("quenchReady", (quench) => {
           // Find the inline-input span for the name
           const nameInput = root.querySelector(".identity-name .inline-input");
 
-          if (!nameInput) {
-            console.log("[CrewSheet Test] No inline name input found");
-            this.skip();
-            return;
-          }
+          // Crew sheet in edit mode should have inline name input
+          assert.ok(nameInput,
+            "Crew sheet should have inline name input in edit mode - template may be broken");
 
           // Edit the name
           const newName = "Test Crew Name Edit";
           nameInput.textContent = newName;
-          nameInput.dispatchEvent(new Event("blur", { bubbles: true }));
+          triggerInlineBlur(sheet, nameInput);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -710,16 +756,14 @@ Hooks.on("quenchReady", (quench) => {
           // Find the inline-input span for lair
           const lairInput = root.querySelector("[data-target*='system.lair'], .meta-value .inline-input");
 
-          if (!lairInput) {
-            console.log("[CrewSheet Test] No inline lair input found");
-            this.skip();
-            return;
-          }
+          // Crew sheet in edit mode should have inline lair input
+          assert.ok(lairInput,
+            "Crew sheet should have inline lair input in edit mode - template may be broken");
 
           // Edit the lair
           const newLair = "Secret Underground Base";
           lairInput.textContent = newLair;
-          lairInput.dispatchEvent(new Event("blur", { bubbles: true }));
+          triggerInlineBlur(sheet, lairInput);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -742,16 +786,14 @@ Hooks.on("quenchReady", (quench) => {
           // Find the inline-input span for the name
           const nameInput = root.querySelector(".identity-name .inline-input");
 
-          if (!nameInput) {
-            console.log("[CrewSheet Test] No inline name input found");
-            this.skip();
-            return;
-          }
+          // Crew sheet in edit mode should have inline name input
+          assert.ok(nameInput,
+            "Crew sheet should have inline name input in edit mode for persistence test - template may be broken");
 
           // Edit the name
           const newName = "Persistent Crew Name";
           nameInput.textContent = newName;
-          nameInput.dispatchEvent(new Event("blur", { bubbles: true }));
+          triggerInlineBlur(sheet, nameInput);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -805,7 +847,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // First, check the upgrade to create owned item
           singleCostCheckbox.checked = true;
-          singleCostCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, singleCostCheckbox);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -829,7 +871,7 @@ Hooks.on("quenchReady", (quench) => {
           assertExists(assert, newCheckbox, `Upgrade checkbox for "${upgradeName}" should exist after re-render`);
 
           newCheckbox.checked = false;
-          newCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, newCheckbox);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -881,7 +923,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Click first slot to set progress to 1
           firstSlot.checked = true;
-          firstSlot.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, firstSlot);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -898,7 +940,7 @@ Hooks.on("quenchReady", (quench) => {
           assertExists(assert, newSecondSlot, `Second slot for upgrade "${upgradeName}" should exist after re-render`);
 
           newSecondSlot.checked = true;
-          newSecondSlot.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewCheckboxChange(sheet, newSecondSlot);
           await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -918,7 +960,7 @@ Hooks.on("quenchReady", (quench) => {
 
             if (uncheckedSecond && uncheckedSecond.checked) {
               uncheckedSecond.checked = false;
-              uncheckedSecond.dispatchEvent(new Event("change", { bubbles: true }));
+              triggerCrewCheckboxChange(sheet, uncheckedSecond);
               await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
               await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -940,7 +982,7 @@ Hooks.on("quenchReady", (quench) => {
 
             if (uncheckedSecond && uncheckedSecond.checked) {
               uncheckedSecond.checked = false;
-              uncheckedSecond.dispatchEvent(new Event("change", { bubbles: true }));
+              triggerCrewCheckboxChange(sheet, uncheckedSecond);
               await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
               await new Promise((resolve) => setTimeout(resolve, 300));
 

@@ -12,7 +12,6 @@ import {
   closeAllDialogs,
   testCleanup,
   TestNumberer,
-  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -323,10 +322,8 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
 
           const toggleExpand = root.querySelector(".toggle-expand");
-          if (!toggleExpand) {
-            skipWithReason(this, "Toggle expand button not found on sheet");
-            return;
-          }
+          assert.ok(toggleExpand,
+            "Toggle expand button should exist on character sheet - template may be broken");
 
           // Initial state should not have can-expand
           const wrapper = sheet._element?.[0] || sheet._element;
@@ -354,10 +351,8 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
 
           const toggleExpand = root.querySelector(".toggle-expand");
-          if (!toggleExpand) {
-            skipWithReason(this, "Toggle expand button not found on sheet");
-            return;
-          }
+          assert.ok(toggleExpand,
+            "Toggle expand button should exist on character sheet - template may be broken");
 
           const wrapper = sheet._element?.[0] || sheet._element;
           const initialState = wrapper?.classList?.contains("can-expand") || false;
@@ -383,10 +378,8 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
 
           const minimizedView = root.querySelector(".minimized-view");
-          if (!minimizedView) {
-            skipWithReason(this, "Minimized view section not found on sheet");
-            return;
-          }
+          assert.ok(minimizedView,
+            "Minimized view section should exist on character sheet - template may be broken");
 
           // Check for portrait in minimized view
           const portrait = minimizedView.querySelector(".portrait, .character-portrait");
@@ -400,10 +393,8 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
 
           const toggleExpand = root.querySelector(".toggle-expand");
-          if (!toggleExpand) {
-            skipWithReason(this, "Toggle expand button not found on sheet");
-            return;
-          }
+          assert.ok(toggleExpand,
+            "Toggle expand button should exist on character sheet - template may be broken");
 
           // Activate mini mode
           toggleExpand.click();
@@ -469,10 +460,8 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
 
           const toggleExpand = root.querySelector(".toggle-expand");
-          if (!toggleExpand) {
-            skipWithReason(this, "Toggle expand button not found on crew sheet");
-            return;
-          }
+          assert.ok(toggleExpand,
+            "Toggle expand button should exist on crew sheet - template may be broken");
 
           // Minimize the sheet
           toggleExpand.click();
@@ -505,10 +494,8 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
 
           const toggleExpand = root.querySelector(".toggle-expand");
-          if (!toggleExpand) {
-            skipWithReason(this, "Toggle expand button not found on crew sheet");
-            return;
-          }
+          assert.ok(toggleExpand,
+            "Toggle expand button should exist on crew sheet - template may be broken");
 
           const initialMinimized = sheet.sheetMinimized || false;
 
@@ -533,10 +520,8 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
 
           const toggleExpand = root.querySelector(".toggle-expand");
-          if (!toggleExpand) {
-            skipWithReason(this, "Toggle expand button not found on crew sheet");
-            return;
-          }
+          assert.ok(toggleExpand,
+            "Toggle expand button should exist on crew sheet - template may be broken");
 
           // Minimize
           toggleExpand.click();

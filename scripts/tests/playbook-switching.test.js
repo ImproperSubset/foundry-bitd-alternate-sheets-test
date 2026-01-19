@@ -199,8 +199,8 @@ Hooks.on("quenchReady", (quench) => {
           if (newPlaybook.name !== playbookItem.name) {
             // At minimum, the acquaintance list should be updated
             assert.ok(
-              newAcquaintances.length > 0 || initialAcquaintances.length === 0,
-              "Should have acquaintances after switch (or none if playbook has none)"
+              newAcquaintances.length > 0,
+              `Should have acquaintances after switch to ${newPlaybook.name} (got ${newAcquaintances.length})`
             );
           }
         });

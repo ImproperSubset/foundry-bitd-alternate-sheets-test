@@ -94,7 +94,6 @@ import {
   ensureSheet,
   testCleanup,
   TestNumberer,
-  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -295,41 +294,6 @@ for (const payload of COMMON_XSS_PAYLOADS) {
 }
 ```
 
-## Skipping Tests
-
-### When to Skip
-
-Only skip tests for **Foundry version-dependent features**:
-
-```javascript
-// ✅ Good - Version-specific API
-if (!foundry.applications?.api?.DialogV2) {
-  skipWithReason(this, "Requires Foundry V13+ (DialogV2 API)");
-  return;
-}
-
-// ❌ Bad - Fixable setup issue
-if (!actor.items.size) {
-  this.skip(); // Don't do this - create the items instead
-}
-```
-
-### Skip Helper
-
-```javascript
-import { skipWithReason } from "../test-utils.js";
-
-t.test("V13 feature test", async function () {
-  if (!foundry.applications?.api?.DialogV2) {
-    skipWithReason(this, "Requires Foundry V13+ (DialogV2 API)");
-    return;
-  }
-  // Test implementation
-});
-```
-
-The helper logs `[SKIP] TestName: Reason` to the console for easy filtering.
-
 ## Test Utilities
 
 ### Core Utilities (`test-utils.js`)
@@ -342,7 +306,6 @@ The helper logs `[SKIP] TestName: Reason` to the console for easy filtering.
 | `ensureSheet(actor)` | Open and return actor sheet |
 | `waitForActorUpdate(actor, opts)` | Wait for actor update hook |
 | `testCleanup(options)` | Clean up actors, dialogs, settings |
-| `skipWithReason(context, reason)` | Skip test with console logging |
 | `TestNumberer` | Auto-number sections/tests |
 
 ### Assertion Helpers

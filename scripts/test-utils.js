@@ -271,64 +271,6 @@ export function assertNotEmpty(assert, collection, message) {
   assert.ok(length > 0, message);
 }
 
-/**
- * Determine if a skip is legitimate (optional feature) or should be a hard failure.
- * Returns true if this is a genuine optional feature (V13-only APIs, specific playbooks).
- *
- * Use this to document why a skip is acceptable:
- * @example
- * if (max < 5) {
- *   // Legitimate skip: not all playbooks have 5+ teeth
- *   if (!isLegitimateSkip("playbook-specific")) this.skip();
- *   return;
- * }
- *
- * @param {string} reason - The reason for the skip
- * @returns {boolean} True if this is a legitimate skip reason
- */
-export function isLegitimateSkip(reason) {
-  const legitimateReasons = [
-    "v13-only-api",           // Feature only available in V13+
-    "playbook-specific",      // Feature depends on specific playbook choice
-    "crew-type-specific",     // Feature depends on specific crew type
-    "optional-feature",       // Optional module feature that may be disabled
-    "clock-actor-unavailable" // Clock actor type not in system
-  ];
-  return legitimateReasons.includes(reason);
-}
-
-/**
- * Skip a test with a standardized console warning message.
- * Use this instead of raw `this.skip()` to ensure all skips are visible and documented.
- *
- * IMPORTANT: Only use for version-dependent features (V12 vs V13 API differences).
- * Tests should only depend on guaranteed available resources.
- *
- * @param {Mocha.Context} context - The Mocha test context (`this` in test function)
- * @param {string} reason - Human-readable reason for the skip
- * @param {string} [testName] - Optional test name for logging (uses context title if available)
- *
- * @example
- * // In a test function:
- * t.test("journal clock renders interactively", async function () {
- *   const root = await getJournalSheetElement(journal);
- *   if (!root) {
- *     skipWithReason(this, "Requires Foundry V13+ (DocumentSheetV2 API)");
- *     return;
- *   }
- *   // ... rest of test
- * });
- *
- * @example
- * // With custom test name:
- * skipWithReason(this, "Clock actor type not available in system", "clock creation test");
- */
-export function skipWithReason(context, reason, testName = null) {
-  const name = testName || context?.test?.title || "Unknown test";
-  console.warn(`[SKIP] ${name}: ${reason}`);
-  context.skip();
-}
-
 // ============================================================================
 // V13+ Compatibility Helpers
 // ============================================================================
@@ -1297,10 +1239,17 @@ export async function runCrewTeethTest({
 export async function cleanupTestActor(actor, { closeDelay = 100 } = {}) {
   if (!actor) return;
 
+  // Helper to wrap promises with timeout to prevent hanging
+  const withTimeout = (promise, ms = 1000) =>
+    Promise.race([
+      promise,
+      new Promise((resolve) => setTimeout(resolve, ms)),
+    ]);
+
   // Try to close the sheet (don't rely on rendered flag - V13 can be inconsistent)
   try {
     if (actor.sheet) {
-      await actor.sheet.close();
+      await withTimeout(actor.sheet.close(), 1000);
       await new Promise((resolve) => setTimeout(resolve, closeDelay));
     }
   } catch {
@@ -1312,8 +1261,7 @@ export async function cleanupTestActor(actor, { closeDelay = 100 } = {}) {
     const actorId = actor.id;
     for (const [, app] of Object.entries(ui.windows)) {
       if (app.actor?.id === actorId || app.document?.id === actorId) {
-        await app.close();
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await withTimeout(app.close(), 500);
       }
     }
   } catch {
@@ -1322,7 +1270,7 @@ export async function cleanupTestActor(actor, { closeDelay = 100 } = {}) {
 
   // Delete the actor
   try {
-    await actor.delete();
+    await withTimeout(actor.delete(), 1000);
   } catch {
     // Ignore delete errors
   }
@@ -1351,16 +1299,12 @@ export async function cleanupTestActors(actors, options = {}) {
 export async function testCleanup({ actors = [], settings = null } = {}) {
   // Close all dialogs first - they may be blocking sheet cleanup
   await closeAllDialogs();
-  await new Promise((resolve) => setTimeout(resolve, 200));
-
-  // Close dialogs again in case new ones appeared during first close
-  await closeAllDialogs();
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await new Promise((resolve) => setTimeout(resolve, 50));
 
   // Clean up all actors
   await cleanupTestActors(actors);
 
-  // Final dialog sweep
+  // Final dialog sweep (in case actor cleanup opened dialogs)
   await closeAllDialogs();
 
   // Clear any notifications that accumulated during tests

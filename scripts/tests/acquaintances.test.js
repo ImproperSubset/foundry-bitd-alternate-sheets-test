@@ -194,14 +194,14 @@ Hooks.on("quenchReady", (quench) => {
 
           const items = findAcquaintanceItems(root);
           console.log("[Acquaintance Test] Found items:", items.length);
+          // CRITICAL: We just set test acquaintances, they MUST render
           if (items.length === 0) {
-            // Debug: log what we can find
             const allDivs = root.querySelectorAll("div[class*='acquaintance']");
             const allDataAcq = root.querySelectorAll("[data-acquaintance]");
-            console.log("[Acquaintance Test] div[class*='acquaintance']:", allDivs.length);
-            console.log("[Acquaintance Test] [data-acquaintance]:", allDataAcq.length);
-            this.skip();
-            return;
+            assert.fail(
+              `Acquaintance items should render after setting test data. ` +
+              `Found: div[class*='acquaintance']=${allDivs.length}, [data-acquaintance]=${allDataAcq.length}`
+            );
           }
 
           // Check each item and log standings found (debug first item)
@@ -245,22 +245,16 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const items = findAcquaintanceItems(root);
-          if (items.length === 0) {
-            console.log("[Acquaintance Test] No acquaintance items found for toggle test");
-            this.skip();
-            return;
-          }
+          // CRITICAL: We just set test acquaintances, they MUST render
+          assert.ok(items.length > 0,
+            "Acquaintance items should render after setting test data for toggle test");
 
           const firstItem = items[0];
           const toggle = getStandingToggle(firstItem);
 
-          if (!toggle) {
-            // No standing toggle button found - skip this test
-            console.log("[Acquaintance Test] No standing toggle found on acquaintance item");
-            console.log("[Acquaintance Test] firstItem HTML:", firstItem.outerHTML);
-            this.skip();
-            return;
-          }
+          // CRITICAL: Acquaintance items should have standing toggle buttons
+          assert.ok(toggle,
+            `Standing toggle should exist on acquaintance item. HTML: ${firstItem.outerHTML.substring(0, 300)}`);
 
           // Record initial state from both DOM and actor data
           const initialStandingDOM = getAcquaintanceStanding(firstItem);
@@ -321,11 +315,9 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
           const items = findAcquaintanceItems(root);
 
-          if (items.length < 3) {
-            console.log("[Acquaintance Test] Not enough acquaintance items for mapping test");
-            this.skip();
-            return;
-          }
+          // CRITICAL: We just set 3 acquaintances, they MUST all render
+          assert.ok(items.length >= 3,
+            `All 3 test acquaintances should render (got ${items.length})`);
 
           // Verify each acquaintance shows the correct standing
           const standingsFound = {};
@@ -377,18 +369,14 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const items = findAcquaintanceItems(root);
-          if (items.length === 0) {
-            console.log("[Acquaintance Test] No acquaintance items found for cycle test");
-            this.skip();
-            return;
-          }
+          // CRITICAL: We just set test acquaintances, they MUST render
+          assert.ok(items.length > 0,
+            "Acquaintance items should render after setting test data for cycle test");
 
           const toggle = getStandingToggle(items[0]);
-          if (!toggle) {
-            console.log("[Acquaintance Test] No toggle found for cycle test");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Acquaintance items should have standing toggle buttons
+          assert.ok(toggle,
+            "Standing toggle should exist on acquaintance item for cycle test");
 
           // Expected cycle order: neutral → friend → rival → neutral
           const expectedOrder = ["neutral", "friend", "rival", "neutral"];
@@ -415,11 +403,9 @@ Hooks.on("quenchReady", (quench) => {
             const currentItems = findAcquaintanceItems(currentRoot);
             const currentToggle = getStandingToggle(currentItems[0]);
 
-            if (!currentToggle) {
-              console.log(`[Acquaintance Test] Toggle not found at iteration ${i + 1}`);
-              this.skip();
-              return;
-            }
+            // CRITICAL: Toggle should be findable after each iteration
+            assert.ok(currentToggle,
+              `Standing toggle should be findable at iteration ${i + 1}`);
 
             currentToggle.click();
             await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
@@ -526,12 +512,13 @@ Hooks.on("quenchReady", (quench) => {
           const items = findAcquaintanceItems(root);
           console.log(`[Acquaintance Test] Found ${items.length} crew contacts after setting test data`);
 
+          // CRITICAL: We just set test contacts, they MUST render
           if (items.length === 0) {
-            // Debug: check what's in the contacts section
             const contactsSection = root.querySelector('[data-tab="contacts"], [data-section-key="acquaintances"]');
-            console.log("[Acquaintance Test] Contacts section HTML:", contactsSection?.innerHTML?.substring(0, 500));
-            this.skip();
-            return;
+            assert.fail(
+              `Crew contacts should render after setting test data. ` +
+              `Contacts section HTML: ${contactsSection?.innerHTML?.substring(0, 300) || 'not found'}`
+            );
           }
 
           // Verify at least one contact has standing styling (same rendering as character sheet)

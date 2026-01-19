@@ -28,6 +28,29 @@ async function linkCharacterToCrew(character, crew) {
 }
 
 /**
+ * Trigger a change event on a crew upgrade checkbox using the sheet's jQuery context.
+ * This is required because event handlers are bound via jQuery delegation on sheet.element.
+ * @param {ActorSheet} sheet - The sheet containing the checkbox
+ * @param {HTMLInputElement} checkbox - The checkbox element
+ */
+function triggerCrewUpgradeChange(sheet, checkbox) {
+  const sheetEl = sheet.element;
+  const itemName = checkbox.dataset.itemName;
+  const slot = checkbox.dataset.upgradeSlot;
+
+  if (itemName && slot) {
+    $(sheetEl).find(`.crew-upgrade-checkbox[data-item-name="${itemName}"][data-upgrade-slot="${slot}"]`).trigger("change");
+  } else if (itemName) {
+    $(sheetEl).find(`.crew-upgrade-checkbox[data-item-name="${itemName}"]`).trigger("change");
+  } else if (checkbox.id) {
+    $(sheetEl).find(`#${CSS.escape(checkbox.id)}`).trigger("change");
+  } else {
+    // Fallback: native event
+    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
+/**
  * Find an upgrade checkbox in the crew sheet by looking for unchecked ones.
  * @param {HTMLElement} root
  * @returns {{checkbox: HTMLInputElement, name: string}|null}
@@ -186,7 +209,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Toggle the upgrade
           upgrade.checkbox.checked = true;
-          upgrade.checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewUpgradeChange(crewSheet, upgrade.checkbox);
 
           // Wait for the crew update
           await waitForActorUpdate(crewActor, { timeoutMs: 3000 }).catch(() => {});
@@ -233,7 +256,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Toggle the upgrade
           upgrade.checkbox.checked = true;
-          upgrade.checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewUpgradeChange(crewSheet, upgrade.checkbox);
 
           // Wait for the crew update
           await waitForActorUpdate(crewActor, { timeoutMs: 3000 }).catch(() => {});
@@ -281,7 +304,7 @@ Hooks.on("quenchReady", (quench) => {
 
           // Toggle the upgrade
           upgrade.checkbox.checked = true;
-          upgrade.checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+          triggerCrewUpgradeChange(crewSheet, upgrade.checkbox);
 
           // Wait for the crew update
           await waitForActorUpdate(crewActor, { timeoutMs: 3000 }).catch(() => {});

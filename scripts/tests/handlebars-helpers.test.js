@@ -220,11 +220,9 @@ Hooks.on("quenchReady", (quench) => {
           }];
 
           const created = await actor.createEmbeddedDocuments("Item", abilityData);
-          if (!created || created.length === 0) {
-            console.log("[Handlebars Test] Could not create test ability");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Creating embedded documents on test actor should succeed
+          assert.ok(created && created.length > 0,
+            "Should be able to create test ability on actor");
 
           await new Promise(r => setTimeout(r, 200));
 
@@ -250,11 +248,9 @@ Hooks.on("quenchReady", (quench) => {
           }];
 
           const created = await actor.createEmbeddedDocuments("Item", abilityData);
-          if (!created || created.length === 0) {
-            console.log("[Handlebars Test] Could not create test ability");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Creating embedded documents on test actor should succeed
+          assert.ok(created && created.length > 0,
+            "Should be able to create test ability with negative cost on actor");
 
           await new Promise(r => setTimeout(r, 200));
 
@@ -298,11 +294,9 @@ Hooks.on("quenchReady", (quench) => {
           }];
 
           const created = await actor.createEmbeddedDocuments("Item", itemData);
-          if (!created || created.length === 0) {
-            console.log("[Handlebars Test] Could not create test item");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Creating embedded documents on test actor should succeed
+          assert.ok(created && created.length > 0,
+            "Should be able to create test item on actor");
 
           const itemId = created[0].id;
 
@@ -347,11 +341,9 @@ Hooks.on("quenchReady", (quench) => {
           }];
 
           const created = await actor.createEmbeddedDocuments("Item", itemData);
-          if (!created || created.length === 0) {
-            console.log("[Handlebars Test] Could not create test item");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Creating embedded documents on test actor should succeed
+          assert.ok(created && created.length > 0,
+            "Should be able to create unequipped test item on actor");
 
           const itemId = created[0].id;
           await new Promise(r => setTimeout(r, 200));
@@ -532,11 +524,9 @@ Hooks.on("quenchReady", (quench) => {
           }];
 
           const created = await actor.createEmbeddedDocuments("Item", abilityData);
-          if (!created || created.length === 0) {
-            console.log("[Handlebars Test] Could not create test ability");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Creating embedded documents on test actor should succeed
+          assert.ok(created && created.length > 0,
+            "Should be able to create ability with class prefix on actor");
 
           await new Promise(r => setTimeout(r, 200));
 
@@ -590,11 +580,9 @@ Hooks.on("quenchReady", (quench) => {
           }];
 
           const created = await actor.createEmbeddedDocuments("Item", abilityData);
-          if (!created || created.length === 0) {
-            console.log("[Handlebars Test] Could not create test ability");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Creating embedded documents on test actor should succeed
+          assert.ok(created && created.length > 0,
+            "Should be able to create ability with multi-line description on actor");
 
           await new Promise(r => setTimeout(r, 200));
 
@@ -622,11 +610,9 @@ Hooks.on("quenchReady", (quench) => {
           }];
 
           const created = await actor.createEmbeddedDocuments("Item", abilityData);
-          if (!created || created.length === 0) {
-            console.log("[Handlebars Test] Could not create test ability");
-            this.skip();
-            return;
-          }
+          // CRITICAL: Creating embedded documents on test actor should succeed
+          assert.ok(created && created.length > 0,
+            "Should be able to create ability with empty description on actor");
 
           await new Promise(r => setTimeout(r, 200));
 

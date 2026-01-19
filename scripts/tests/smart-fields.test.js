@@ -200,10 +200,7 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const selector = findSmartItemSelector(root, "crew_reputation");
-          if (!selector) {
-            this.skip();
-            return;
-          }
+          assert.ok(selector, "crew_reputation selector should exist in edit mode");
 
           // Click the selector
           selector.click();
@@ -240,32 +237,21 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const selector = findSmartItemSelector(root, "crew_reputation");
-          if (!selector) {
-            this.skip();
-            return;
-          }
+          assert.ok(selector, "crew_reputation selector should exist in edit mode");
 
           // Click the selector
           selector.click();
 
           // Wait for dialog
           const dialog = await waitForCardDialog(3000);
-          if (!dialog) {
-            this.skip();
-            return;
-          }
+          assert.ok(dialog, "Card selection dialog should open after clicking selector");
 
           const dialogEl = dialog.element;
           assert.ok(dialogEl, "Dialog element should exist");
 
           // Find radio inputs (the actual form controls)
           const radioInputs = dialogEl.querySelectorAll("input[name='selectionId']");
-
-          if (!radioInputs || radioInputs.length === 0) {
-            await dialog.close();
-            this.skip();
-            return;
-          }
+          assert.ok(radioInputs && radioInputs.length > 0, "Dialog should have selection radio inputs");
 
           // Click the first radio input's parent label to select it
           const firstRadio = radioInputs[0];
@@ -312,10 +298,7 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const selector = findSmartItemSelector(root, "hunting_grounds");
-          if (!selector) {
-            this.skip();
-            return;
-          }
+          assert.ok(selector, "hunting_grounds selector should exist in edit mode");
 
           // Click the selector
           selector.click();
@@ -348,29 +331,18 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const selector = findSmartItemSelector(root, "hunting_grounds");
-          if (!selector) {
-            this.skip();
-            return;
-          }
+          assert.ok(selector, "hunting_grounds selector should exist in edit mode");
 
           // Click the selector
           selector.click();
 
           // Wait for dialog
           const dialog = await waitForCardDialog(3000);
-          if (!dialog) {
-            this.skip();
-            return;
-          }
+          assert.ok(dialog, "Card selection dialog should open after clicking selector");
 
           const dialogEl = dialog.element;
           const radioInputs = dialogEl.querySelectorAll("input[name='selectionId']");
-
-          if (!radioInputs || radioInputs.length === 0) {
-            await dialog.close();
-            this.skip();
-            return;
-          }
+          assert.ok(radioInputs && radioInputs.length > 0, "Dialog should have selection radio inputs");
 
           // Click the first radio input
           const firstRadio = radioInputs[0];
@@ -386,11 +358,7 @@ Hooks.on("quenchReady", (quench) => {
           const okButton = dialogEl.querySelector(
             'button[data-action="ok"], button[data-button="confirm"]'
           );
-          if (!okButton) {
-            await dialog.close();
-            this.skip();
-            return;
-          }
+          assert.ok(okButton, "OK button should exist in dialog");
 
           okButton.click();
 
@@ -462,10 +430,7 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const field = findSmartEditField(root, "system.heritage");
-          if (!field) {
-            this.skip();
-            return;
-          }
+          assert.ok(field, "Heritage smart-edit field should exist in edit mode");
 
           // Click the field
           field.click();
@@ -504,11 +469,7 @@ Hooks.on("quenchReady", (quench) => {
           const field = findSmartEditField(root, "system.background") ||
             findSmartEditField(root, "system.heritage") ||
             findSmartEditField(root, "system.vice");
-
-          if (!field) {
-            this.skip();
-            return;
-          }
+          assert.ok(field, "At least one smart-edit field (background, heritage, or vice) should exist");
 
           // Click the field
           field.click();
@@ -550,10 +511,7 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const field = findSmartEditField(root, "system.heritage");
-          if (!field) {
-            this.skip();
-            return;
-          }
+          assert.ok(field, "Heritage smart-edit field should exist in edit mode");
 
           // Click the field
           field.click();
@@ -561,66 +519,45 @@ Hooks.on("quenchReady", (quench) => {
           // Wait for dialog
           const cardDialog = await waitForCardDialog(2000);
           const textDialog = cardDialog ? null : await waitForDialog(1000);
-
-          if (!cardDialog && !textDialog) {
-            this.skip();
-            return;
-          }
+          assert.ok(cardDialog || textDialog, "Either card selector or text dialog should open");
 
           if (cardDialog) {
             // Card selector - pick first option
             const dialogEl = cardDialog.element;
             const radioInputs = dialogEl.querySelectorAll("input[name='selectionId']");
+            assert.ok(radioInputs && radioInputs.length > 0, "Card dialog should have selection radio inputs");
 
-            if (radioInputs && radioInputs.length > 0) {
-              const firstRadio = radioInputs[0];
-              const label = firstRadio.closest("label");
-              if (label) label.click();
-              else firstRadio.click();
-              await new Promise((resolve) => setTimeout(resolve, 100));
+            const firstRadio = radioInputs[0];
+            const label = firstRadio.closest("label");
+            if (label) label.click();
+            else firstRadio.click();
+            await new Promise((resolve) => setTimeout(resolve, 100));
 
-              const okButton = dialogEl.querySelector(
-                'button[data-action="ok"], button[data-button="confirm"]'
-              );
-              if (okButton) {
-                okButton.click();
-                await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
-                await new Promise((resolve) => setTimeout(resolve, 300));
-              } else {
-                await cardDialog.close();
-                this.skip();
-                return;
-              }
-            } else {
-              await cardDialog.close();
-              this.skip();
-              return;
-            }
+            const okButton = dialogEl.querySelector(
+              'button[data-action="ok"], button[data-button="confirm"]'
+            );
+            assert.ok(okButton, "Card dialog should have OK button");
+
+            okButton.click();
+            await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+            await new Promise((resolve) => setTimeout(resolve, 300));
           } else if (textDialog) {
             // Text dialog - enter a value
             const dialogEl = textDialog.element?.[0] || textDialog.element;
             const input = dialogEl?.querySelector("input[type='text'], input[name='value']");
-            if (input) {
-              input.value = "Test Heritage Value";
-              input.dispatchEvent(new Event("input", { bubbles: true }));
-              await new Promise((resolve) => setTimeout(resolve, 100));
+            assert.ok(input, "Text dialog should have text input");
 
-              // Click OK/submit
-              const okButton = dialogEl.querySelector('button[data-button="confirm"], button[type="submit"]');
-              if (okButton) {
-                okButton.click();
-                await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
-                await new Promise((resolve) => setTimeout(resolve, 300));
-              } else {
-                await textDialog.close();
-                this.skip();
-                return;
-              }
-            } else {
-              await textDialog.close();
-              this.skip();
-              return;
-            }
+            input.value = "Test Heritage Value";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
+            // Click OK/submit
+            const okButton = dialogEl.querySelector('button[data-button="confirm"], button[type="submit"]');
+            assert.ok(okButton, "Text dialog should have OK/submit button");
+
+            okButton.click();
+            await waitForActorUpdate(actor, { timeoutMs: 3000 }).catch(() => {});
+            await new Promise((resolve) => setTimeout(resolve, 300));
           }
 
           // CRITICAL: Verify actor.system.heritage was updated
@@ -764,18 +701,8 @@ Hooks.on("quenchReady", (quench) => {
           const textInput = v2TextInput || v1TextInput;
           const dialogEl = v2Dialog || v1DialogEl;
 
-          if (!textInput) {
-            // May get card dialog if there are still items somehow - skip gracefully
-            if (v2Dialog) {
-              const cancelBtn = v2Dialog.querySelector('button[data-action="cancel"]');
-              if (cancelBtn) cancelBtn.click();
-              else v2Dialog.close();
-            } else if (v1Dialog) {
-              await v1Dialog.close();
-            }
-            this.skip();
-            return;
-          }
+          // With both population sources disabled, we must get a text input dialog
+          assert.ok(textInput, "Text input should appear when both compendium and world population are disabled");
 
           // Enter custom heritage value
           const customValue = "Custom Test Heritage";
@@ -815,11 +742,7 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           const field = findSmartEditField(root, "system.background");
-          if (!field) {
-            // Background field might not exist on all sheets
-            this.skip();
-            return;
-          }
+          assert.ok(field, "Background smart-edit field should exist on character sheet in edit mode");
 
           // Click the field
           field.click();
@@ -888,31 +811,22 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
 
           // Verify we're using the alternate sheet
-          if (!root?.classList?.contains("blades-alt")) {
-            console.warn("[Tooltip Test] Sheet is not using alternate sheet class");
-            this.skip();
-            return;
-          }
+          assert.ok(
+            root?.classList?.contains("blades-alt"),
+            "Sheet should use the blades-alt alternate sheet class"
+          );
 
           // Find smart field element in the crew-meta-line section
           // In edit mode: .smart-field-label with data-item-type
           // In non-edit mode: .smart-field-value (no data-item-type, but has data-tooltip)
           const smartField = root.querySelector(".crew-meta-line .smart-field-label") ||
             root.querySelector(".crew-meta-line .smart-field-value");
-
-          if (!smartField) {
-            // Debug: log what we can find
-            console.warn("[Tooltip Test] Could not find smart field in .crew-meta-line");
-            console.warn("[Tooltip Test] crew-meta-line exists:", !!root.querySelector(".crew-meta-line"));
-            console.warn("[Tooltip Test] All smart-field elements:", root.querySelectorAll("[class*='smart-field']").length);
-            this.skip();
-            return;
-          }
+          assert.ok(smartField, "Smart field element should exist in crew-meta-line section");
 
           const tooltip = smartField.getAttribute("data-tooltip");
           assert.ok(
-            tooltip !== null && tooltip !== undefined,
-            "Smart field should have data-tooltip attribute"
+            tooltip !== null,
+            `Smart field should have data-tooltip attribute (got: ${tooltip})`
           );
         });
 
@@ -932,11 +846,7 @@ Hooks.on("quenchReady", (quench) => {
               }
               return acc;
             }, Promise.resolve([]));
-
-          if (repItems.length === 0) {
-            this.skip();
-            return;
-          }
+          assert.ok(repItems.length > 0, "crew_reputation items should exist in compendia for this test");
 
           // Add the item to the actor
           const itemData = repItems[0].toObject();
@@ -951,20 +861,16 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
 
           // Verify we're using the alternate sheet
-          if (!root?.classList?.contains("blades-alt")) {
-            this.skip();
-            return;
-          }
+          assert.ok(
+            root?.classList?.contains("blades-alt"),
+            "Sheet should use the blades-alt alternate sheet class"
+          );
 
           // Find reputation display element - first smart-field in list-meta-line is reputation
           // data-item-type only exists in edit mode, so use positional selector
           const listMetaLine = root.querySelector(".crew-meta-line.list-meta-line");
           const repElement = listMetaLine?.querySelector(".smart-field-label, .smart-field-value");
-
-          if (!repElement) {
-            this.skip();
-            return;
-          }
+          assert.ok(repElement, "Reputation element should exist in list-meta-line section");
 
           const tooltip = repElement.getAttribute("data-tooltip");
 
@@ -981,10 +887,10 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
 
           // Verify we're using the alternate sheet
-          if (!root?.classList?.contains("blades-alt")) {
-            this.skip();
-            return;
-          }
+          assert.ok(
+            root?.classList?.contains("blades-alt"),
+            "Sheet should use the blades-alt alternate sheet class"
+          );
 
           // Remove any existing reputation items
           const existingRep = actor.items.find((i) => i.type === "crew_reputation");
@@ -997,18 +903,14 @@ Hooks.on("quenchReady", (quench) => {
           // Find reputation field - first smart-field in list-meta-line
           const listMetaLine = root.querySelector(".crew-meta-line.list-meta-line");
           const repElement = listMetaLine?.querySelector(".smart-field-label, .smart-field-value");
-
-          if (!repElement) {
-            this.skip();
-            return;
-          }
+          assert.ok(repElement, "Reputation element should exist in list-meta-line section");
 
           const tooltip = repElement.getAttribute("data-tooltip");
 
           // Even without an item, there should be a fallback tooltip (the label)
           assert.ok(
-            tooltip !== null && tooltip !== undefined,
-            "Smart field should have fallback tooltip when no item selected"
+            tooltip !== null,
+            `Smart field should have fallback tooltip when no item selected (got: ${tooltip})`
           );
         });
       });

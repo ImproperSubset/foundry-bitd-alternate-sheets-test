@@ -32,6 +32,13 @@ Hooks.on("quenchReady", (quench) => {
         let character;
         let crew;
 
+        // Helper to wrap promises with timeout to prevent hanging
+        const withTimeout = (promise, ms = 1000) =>
+          Promise.race([
+            promise,
+            new Promise((resolve) => setTimeout(resolve, ms)),
+          ]);
+
         beforeEach(async function () {
           this.timeout(15000);
 
@@ -51,14 +58,13 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         afterEach(async function () {
-          this.timeout(10000);
+          this.timeout(5000);
 
           // Close all sheets first
           for (const actor of [character, crew]) {
             if (actor?.sheet?.rendered) {
               try {
-                await actor.sheet.close();
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await withTimeout(actor.sheet.close(), 500);
               } catch {
                 // Ignore close errors
               }
@@ -66,11 +72,11 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           // Wait for Foundry to settle
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise(resolve => setTimeout(resolve, 100));
 
           // Clean up actors
-          await cleanupTestActor(character);
-          await cleanupTestActor(crew);
+          await withTimeout(cleanupTestActor(character), 1000);
+          await withTimeout(cleanupTestActor(crew), 1000);
           character = null;
           crew = null;
         });
@@ -189,6 +195,13 @@ Hooks.on("quenchReady", (quench) => {
         let character;
         let crew;
 
+        // Helper to wrap promises with timeout to prevent hanging
+        const withTimeout = (promise, ms = 1000) =>
+          Promise.race([
+            promise,
+            new Promise((resolve) => setTimeout(resolve, ms)),
+          ]);
+
         beforeEach(async function () {
           this.timeout(15000);
 
@@ -206,22 +219,21 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         afterEach(async function () {
-          this.timeout(10000);
+          this.timeout(5000);
 
           for (const actor of [character, crew]) {
             if (actor?.sheet?.rendered) {
               try {
-                await actor.sheet.close();
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await withTimeout(actor.sheet.close(), 500);
               } catch {
                 // Ignore
               }
             }
           }
 
-          await new Promise(resolve => setTimeout(resolve, 200));
-          await cleanupTestActor(character);
-          await cleanupTestActor(crew);
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await withTimeout(cleanupTestActor(character), 1000);
+          await withTimeout(cleanupTestActor(crew), 1000);
           character = null;
           crew = null;
         });
@@ -277,6 +289,13 @@ Hooks.on("quenchReady", (quench) => {
         let character;
         let crew;
 
+        // Helper to wrap promises with timeout to prevent hanging
+        const withTimeout = (promise, ms = 1000) =>
+          Promise.race([
+            promise,
+            new Promise((resolve) => setTimeout(resolve, ms)),
+          ]);
+
         beforeEach(async function () {
           this.timeout(15000);
 
@@ -294,22 +313,21 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         afterEach(async function () {
-          this.timeout(10000);
+          this.timeout(5000);
 
           for (const actor of [character, crew]) {
             if (actor?.sheet?.rendered) {
               try {
-                await actor.sheet.close();
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await withTimeout(actor.sheet.close(), 500);
               } catch {
                 // Ignore
               }
             }
           }
 
-          await new Promise(resolve => setTimeout(resolve, 200));
-          await cleanupTestActor(character);
-          await cleanupTestActor(crew);
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await withTimeout(cleanupTestActor(character), 1000);
+          await withTimeout(cleanupTestActor(crew), 1000);
           character = null;
           crew = null;
         });
@@ -373,6 +391,13 @@ Hooks.on("quenchReady", (quench) => {
         let character;
         let crew;
 
+        // Helper to wrap promises with timeout to prevent hanging
+        const withTimeout = (promise, ms = 1000) =>
+          Promise.race([
+            promise,
+            new Promise((resolve) => setTimeout(resolve, ms)),
+          ]);
+
         beforeEach(async function () {
           this.timeout(15000);
 
@@ -394,22 +419,21 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         afterEach(async function () {
-          this.timeout(10000);
+          this.timeout(5000);
 
           for (const actor of [character, crew]) {
             if (actor?.sheet?.rendered) {
               try {
-                await actor.sheet.close();
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await withTimeout(actor.sheet.close(), 500);
               } catch {
                 // Ignore
               }
             }
           }
 
-          await new Promise(resolve => setTimeout(resolve, 200));
-          await cleanupTestActor(character);
-          await cleanupTestActor(crew);
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await withTimeout(cleanupTestActor(character), 1000);
+          await withTimeout(cleanupTestActor(crew), 1000);
           character = null;
           crew = null;
         });
@@ -505,6 +529,13 @@ Hooks.on("quenchReady", (quench) => {
         let crew;
         let originalSettings = {};
 
+        // Helper to wrap promises with timeout to prevent hanging
+        const withTimeout = (promise, ms = 1000) =>
+          Promise.race([
+            promise,
+            new Promise((resolve) => setTimeout(resolve, ms)),
+          ]);
+
         /**
          * Find all checkboxes for the Steady upgrade on the crew sheet.
          * @param {HTMLElement} root - The crew sheet root element
@@ -585,14 +616,13 @@ Hooks.on("quenchReady", (quench) => {
         });
 
         afterEach(async function () {
-          this.timeout(15000);
+          this.timeout(8000);
 
           // Close all sheets first
           for (const actor of [character, crew]) {
             if (actor?.sheet?.rendered) {
               try {
-                await actor.sheet.close();
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await withTimeout(actor.sheet.close(), 500);
               } catch {
                 // Ignore close errors
               }
@@ -600,19 +630,23 @@ Hooks.on("quenchReady", (quench) => {
           }
 
           // Wait for Foundry to settle
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => setTimeout(resolve, 100));
 
           // Restore original settings
-          if (originalSettings.populateFromCompendia !== undefined) {
-            await game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", originalSettings.populateFromCompendia);
-          }
-          if (originalSettings.populateFromWorld !== undefined) {
-            await game.settings.set(TARGET_MODULE_ID, "populateFromWorld", originalSettings.populateFromWorld);
+          try {
+            if (originalSettings.populateFromCompendia !== undefined) {
+              await withTimeout(game.settings.set(TARGET_MODULE_ID, "populateFromCompendia", originalSettings.populateFromCompendia), 500);
+            }
+            if (originalSettings.populateFromWorld !== undefined) {
+              await withTimeout(game.settings.set(TARGET_MODULE_ID, "populateFromWorld", originalSettings.populateFromWorld), 500);
+            }
+          } catch {
+            // Ignore settings errors
           }
 
           // Clean up actors
-          await cleanupTestActor(character);
-          await cleanupTestActor(crew);
+          await withTimeout(cleanupTestActor(character), 1000);
+          await withTimeout(cleanupTestActor(crew), 1000);
           character = null;
           crew = null;
         });
@@ -676,7 +710,16 @@ Hooks.on("quenchReady", (quench) => {
           // STEP 1: Click FIRST Steady checkbox (partial progress)
           const firstCheckbox = steadyCheckboxes[0];
           const steadySourceId = firstCheckbox.dataset?.itemId;
-          firstCheckbox.click();
+
+          // Use sheet's jQuery context to trigger the change event (required for jQuery event delegation)
+          const firstCheckboxId = firstCheckbox.id;
+          if (firstCheckboxId) {
+            $(crewSheet.element).find(`#${CSS.escape(firstCheckboxId)}`).trigger("change");
+          } else if (steadySourceId) {
+            $(crewSheet.element).find(`[data-item-id="${steadySourceId}"]`).first().trigger("change");
+          } else {
+            firstCheckbox.click();
+          }
           await new Promise(resolve => setTimeout(resolve, 500));
 
           // Verify Steady is still NOT added to active upgrades (partial progress only)
@@ -709,8 +752,16 @@ Hooks.on("quenchReady", (quench) => {
               continue;
             }
 
-            // Use native click() which naturally fires change event
-            currentCheckbox.click();
+            // Use sheet's jQuery context to trigger the change event (required for jQuery event delegation)
+            const checkboxId = currentCheckbox.id;
+            const itemId = currentCheckbox.dataset?.itemId;
+            if (checkboxId) {
+              $(crewSheet.element).find(`#${CSS.escape(checkboxId)}`).trigger("change");
+            } else if (itemId) {
+              $(crewSheet.element).find(`[data-item-id="${itemId}"]`).eq(i).trigger("change");
+            } else {
+              currentCheckbox.click();
+            }
             await new Promise(resolve => setTimeout(resolve, 400));
           }
 
@@ -750,8 +801,16 @@ Hooks.on("quenchReady", (quench) => {
 
           assert.ok(lastCheckbox, "Should find last Steady checkbox after re-render");
 
-          // Click to uncheck (toggle off)
-          $(lastCheckbox).prop("checked", false).trigger("change");
+          // Click to uncheck (toggle off) - use sheet's jQuery context
+          const lastCheckboxId = lastCheckbox.id;
+          const lastItemId = lastCheckbox.dataset?.itemId;
+          if (lastCheckboxId) {
+            $(crewSheet.element).find(`#${CSS.escape(lastCheckboxId)}`).prop("checked", false).trigger("change");
+          } else if (lastItemId) {
+            $(crewSheet.element).find(`[data-item-id="${lastItemId}"]`).last().prop("checked", false).trigger("change");
+          } else {
+            $(lastCheckbox).prop("checked", false).trigger("change");
+          }
           await new Promise(resolve => setTimeout(resolve, 600));
 
           // Verify Steady is REMOVED from active upgrades

@@ -14,7 +14,6 @@ import {
   findClassItem,
   TestNumberer,
   assertExists,
-  skipWithReason,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -131,16 +130,12 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find a different playbook
           const newPlaybook = await findClassItem("Lurk");
-          if (!newPlaybook) {
-            skipWithReason(this, "Lurk playbook not found in compendia");
-            return;
-          }
+          assert.ok(newPlaybook,
+            "Lurk playbook should be found in compendia - compendia may not be loaded");
 
           // Verify it's different from current
-          if (newPlaybook.name.toLowerCase() === currentPlaybook?.toLowerCase()) {
-            skipWithReason(this, "Only one playbook type available");
-            return;
-          }
+          assert.ok(newPlaybook.name.toLowerCase() !== currentPlaybook?.toLowerCase(),
+            "Test should use different playbook than current - findClassItem may have returned wrong playbook");
 
           // CRITICAL: Capture initial state
           const initialPlaybook = actor.system.playbook;
@@ -175,10 +170,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find the same playbook
           const samePlaybook = await findClassItem(currentPlaybook);
-          if (!samePlaybook) {
-            skipWithReason(this, "Current playbook not found in compendia");
-            return;
-          }
+          assert.ok(samePlaybook,
+            `Current playbook (${currentPlaybook}) should be found in compendia - compendia may not be loaded`);
 
           // CRITICAL: Capture initial item count
           const initialItemCount = actor.items.size;
@@ -231,10 +224,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find an item from compendia
           const item = await findCompendiumItem("item");
-          if (!item) {
-            skipWithReason(this, "No items found in compendia");
-            return;
-          }
+          assert.ok(item,
+            "Items should be found in compendia - compendia may not be loaded");
 
           // CRITICAL: Capture initial state
           const initialCount = actor.items.size;
@@ -253,8 +244,8 @@ Hooks.on("quenchReady", (quench) => {
           // CRITICAL: Verify item was added
           const finalCount = actor.items.size;
           assert.ok(
-            finalCount > initialCount,
-            `Item count should increase after drop (was ${initialCount}, now ${finalCount})`
+            finalCount >= initialCount + 1,
+            `Item count should increase by at least 1 after drop (was ${initialCount}, now ${finalCount}, item: "${item.name}")`
           );
 
           console.log(`[DragDrop Test] Item drop: ${initialCount} -> ${finalCount} items`);
@@ -267,10 +258,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find an ability from compendia
           const ability = await findCompendiumItem("ability");
-          if (!ability) {
-            skipWithReason(this, "No abilities found in compendia");
-            return;
-          }
+          assert.ok(ability,
+            "Abilities should be found in compendia - compendia may not be loaded");
 
           // CRITICAL: Capture initial state
           const initialAbilityCount = getItemCount(actor, "ability");
@@ -289,8 +278,8 @@ Hooks.on("quenchReady", (quench) => {
           // CRITICAL: Verify ability was added
           const finalAbilityCount = getItemCount(actor, "ability");
           assert.ok(
-            finalAbilityCount > initialAbilityCount,
-            `Ability count should increase after drop (was ${initialAbilityCount}, now ${finalAbilityCount})`
+            finalAbilityCount >= initialAbilityCount + 1,
+            `Ability count should increase by at least 1 after drop (was ${initialAbilityCount}, now ${finalAbilityCount}, ability: "${ability.name}")`
           );
 
           console.log(`[DragDrop Test] Ability drop: ${initialAbilityCount} -> ${finalAbilityCount} abilities`);
@@ -326,10 +315,8 @@ Hooks.on("quenchReady", (quench) => {
         t.test("dropping NPC adds acquaintance", async function () {
           this.timeout(10000);
 
-          if (!npcActor) {
-            skipWithReason(this, "NPC actor type not available");
-            return;
-          }
+          assert.ok(npcActor,
+            "NPC actor should be created - NPC actor type must be available in system");
 
           const sheet = await ensureSheet(actor);
 
@@ -361,10 +348,8 @@ Hooks.on("quenchReady", (quench) => {
         t.test("dropping same NPC twice does not duplicate", async function () {
           this.timeout(12000);
 
-          if (!npcActor) {
-            skipWithReason(this, "NPC actor type not available");
-            return;
-          }
+          assert.ok(npcActor,
+            "NPC actor should be created - NPC actor type must be available in system");
 
           const sheet = await ensureSheet(actor);
 
@@ -421,10 +406,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find a crew ability
           const crewAbility = await findCompendiumItem("crew_ability");
-          if (!crewAbility) {
-            skipWithReason(this, "No crew_ability items found in compendia");
-            return;
-          }
+          assert.ok(crewAbility,
+            "Crew abilities should be found in compendia - compendia may not be loaded");
 
           // CRITICAL: Capture initial state
           const initialCount = getItemCount(actor, "crew_ability");
@@ -443,8 +426,8 @@ Hooks.on("quenchReady", (quench) => {
           // CRITICAL: Verify crew ability was added
           const finalCount = getItemCount(actor, "crew_ability");
           assert.ok(
-            finalCount > initialCount,
-            `Crew ability count should increase after drop (was ${initialCount}, now ${finalCount})`
+            finalCount >= initialCount + 1,
+            `Crew ability count should increase by at least 1 after drop (was ${initialCount}, now ${finalCount}, ability: "${crewAbility.name}")`
           );
 
           console.log(`[DragDrop Test] Crew ability drop: ${initialCount} -> ${finalCount}`);
@@ -457,10 +440,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Find a crew upgrade
           const crewUpgrade = await findCompendiumItem("crew_upgrade");
-          if (!crewUpgrade) {
-            skipWithReason(this, "No crew_upgrade items found in compendia");
-            return;
-          }
+          assert.ok(crewUpgrade,
+            "Crew upgrades should be found in compendia - compendia may not be loaded");
 
           // CRITICAL: Capture initial state
           const initialCount = getItemCount(actor, "crew_upgrade");
@@ -479,8 +460,8 @@ Hooks.on("quenchReady", (quench) => {
           // CRITICAL: Verify crew upgrade was added
           const finalCount = getItemCount(actor, "crew_upgrade");
           assert.ok(
-            finalCount > initialCount,
-            `Crew upgrade count should increase after drop (was ${initialCount}, now ${finalCount})`
+            finalCount >= initialCount + 1,
+            `Crew upgrade count should increase by at least 1 after drop (was ${initialCount}, now ${finalCount}, upgrade: "${crewUpgrade.name}")`
           );
 
           console.log(`[DragDrop Test] Crew upgrade drop: ${initialCount} -> ${finalCount}`);
