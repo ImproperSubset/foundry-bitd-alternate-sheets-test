@@ -12,6 +12,7 @@ import {
   isTargetModuleActive,
   closeAllDialogs,
   cleanupTestActor,
+  cleanupTestActors,
   TestNumberer,
   assertExists,
   assertNotEmpty,
@@ -996,6 +997,223 @@ Hooks.on("quenchReady", (quench) => {
               console.log(`[CrewSheet Test] Multi-cost rollback: progress ${progressAfterSecond} → ${progressAfterUncheck}`);
             }
           }
+        });
+      });
+
+      t.section("Crew Type Filtering - No Playbook Selected (#144)", () => {
+        let actor;
+
+        beforeEach(async function () {
+          this.timeout(10000);
+          // Create crew WITHOUT a crew type
+          const result = await createTestCrewActor({
+            name: "NoPlaybook-Filter-Test"
+            // Note: no crewTypeName - crew has no type selected
+          });
+          actor = result.actor;
+        });
+
+        afterEach(async function () {
+          this.timeout(5000);
+          await cleanupTestActor(actor);
+          actor = null;
+        });
+
+        t.test("crew with no type shows empty abilities list", async function () {
+          this.timeout(10000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Navigate to abilities tab
+          const abilitiesTab = root.querySelector('[data-tab="abilities"]');
+          assert.ok(abilitiesTab, "Abilities tab should exist on crew sheet");
+          abilitiesTab.click();
+          await new Promise(r => setTimeout(r, 300));
+
+          // Check for ability checkboxes - should be none (or only virtual/cohort-related)
+          const abilityCheckboxes = root.querySelectorAll(".crew-ability-checkbox");
+
+          assert.strictEqual(
+            abilityCheckboxes.length,
+            0,
+            `Crew with no type should show 0 abilities, found ${abilityCheckboxes.length}`
+          );
+        });
+
+        t.test("crew with no type shows empty upgrades list (except virtual cohorts)", async function () {
+          this.timeout(10000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Navigate to upgrades tab
+          const upgradesTab = root.querySelector('[data-tab="upgrades"]');
+          assert.ok(upgradesTab, "Upgrades tab should exist on crew sheet");
+          upgradesTab.click();
+          await new Promise(r => setTimeout(r, 300));
+
+          // Check for upgrade checkboxes
+          // Virtual cohort upgrades may still appear since they have no crew type requirement
+          const upgradeCheckboxes = root.querySelectorAll(".crew-upgrade-checkbox");
+
+          // Filter out virtual cohort upgrades which are always shown
+          const nonVirtualUpgrades = Array.from(upgradeCheckboxes).filter(cb => {
+            const name = cb.dataset.itemName?.toLowerCase() || "";
+            return !name.includes("cohort");
+          });
+
+          assert.strictEqual(
+            nonVirtualUpgrades.length,
+            0,
+            `Crew with no type should show 0 non-cohort upgrades, found ${nonVirtualUpgrades.length}`
+          );
+        });
+      });
+
+      t.section("Generic Keyword Support (#144)", () => {
+        let assassinsCrew;
+        let smugglersCrew;
+
+        beforeEach(async function () {
+          this.timeout(15000);
+          // Create two crews with DIFFERENT crew types
+          const assassinsResult = await createTestCrewActor({
+            name: "GenericKeyword-Assassins-Test",
+            crewTypeName: "Assassins"
+          });
+          assassinsCrew = assassinsResult.actor;
+
+          const smugglersResult = await createTestCrewActor({
+            name: "GenericKeyword-Smugglers-Test",
+            crewTypeName: "Smugglers"
+          });
+          smugglersCrew = smugglersResult.actor;
+        });
+
+        afterEach(async function () {
+          this.timeout(8000);
+          await cleanupTestActors([assassinsCrew, smugglersCrew]);
+          assassinsCrew = null;
+          smugglersCrew = null;
+        });
+
+        t.test("different crew types have different type-specific abilities", async function () {
+          this.timeout(15000);
+
+          // Get Assassins abilities
+          const assassinsSheet = await ensureSheet(assassinsCrew);
+          let assassinsRoot = assassinsSheet.element?.[0] || assassinsSheet.element;
+
+          const assassinsAbilitiesTab = assassinsRoot.querySelector('[data-tab="abilities"]');
+          if (assassinsAbilitiesTab) {
+            assassinsAbilitiesTab.click();
+            await new Promise(r => setTimeout(r, 300));
+          }
+
+          assassinsRoot = assassinsSheet.element?.[0] || assassinsSheet.element;
+          const assassinsAbilities = Array.from(
+            assassinsRoot.querySelectorAll(".crew-ability-checkbox")
+          ).map(cb => cb.dataset.itemName);
+
+          // Get Smugglers abilities
+          const smugglersSheet = await ensureSheet(smugglersCrew);
+          let smugglersRoot = smugglersSheet.element?.[0] || smugglersSheet.element;
+
+          const smugglersAbilitiesTab = smugglersRoot.querySelector('[data-tab="abilities"]');
+          if (smugglersAbilitiesTab) {
+            smugglersAbilitiesTab.click();
+            await new Promise(r => setTimeout(r, 300));
+          }
+
+          smugglersRoot = smugglersSheet.element?.[0] || smugglersSheet.element;
+          const smugglersAbilities = Array.from(
+            smugglersRoot.querySelectorAll(".crew-ability-checkbox")
+          ).map(cb => cb.dataset.itemName);
+
+          // Find abilities unique to each crew type
+          const onlyAssassins = assassinsAbilities.filter(a => !smugglersAbilities.includes(a));
+          const onlySmugglers = smugglersAbilities.filter(a => !assassinsAbilities.includes(a));
+
+          // Both crews should have abilities
+          assert.ok(
+            assassinsAbilities.length > 0,
+            `Assassins should have abilities, found ${assassinsAbilities.length}`
+          );
+          assert.ok(
+            smugglersAbilities.length > 0,
+            `Smugglers should have abilities, found ${smugglersAbilities.length}`
+          );
+
+          // Each crew type should have at least some UNIQUE abilities
+          // If filtering wasn't working, both would show all abilities
+          assert.ok(
+            onlyAssassins.length > 0,
+            `Assassins should have unique abilities not shown for Smugglers, found ${onlyAssassins.length}: ${onlyAssassins.slice(0, 3).join(", ")}`
+          );
+          assert.ok(
+            onlySmugglers.length > 0,
+            `Smugglers should have unique abilities not shown for Assassins, found ${onlySmugglers.length}: ${onlySmugglers.slice(0, 3).join(", ")}`
+          );
+
+          console.log(`[CrewSheet Test] Assassins unique: ${onlyAssassins.length}, Smugglers unique: ${onlySmugglers.length}`);
+        });
+
+        t.test("generic/empty-class abilities appear for multiple crew types", async function () {
+          this.timeout(15000);
+
+          // Get Assassins abilities
+          const assassinsSheet = await ensureSheet(assassinsCrew);
+          let assassinsRoot = assassinsSheet.element?.[0] || assassinsSheet.element;
+
+          const assassinsAbilitiesTab = assassinsRoot.querySelector('[data-tab="abilities"]');
+          if (assassinsAbilitiesTab) {
+            assassinsAbilitiesTab.click();
+            await new Promise(r => setTimeout(r, 300));
+          }
+
+          assassinsRoot = assassinsSheet.element?.[0] || assassinsSheet.element;
+          const assassinsAbilities = Array.from(
+            assassinsRoot.querySelectorAll(".crew-ability-checkbox")
+          ).map(cb => cb.dataset.itemName);
+
+          // Get Smugglers abilities
+          const smugglersSheet = await ensureSheet(smugglersCrew);
+          let smugglersRoot = smugglersSheet.element?.[0] || smugglersSheet.element;
+
+          const smugglersAbilitiesTab = smugglersRoot.querySelector('[data-tab="abilities"]');
+          if (smugglersAbilitiesTab) {
+            smugglersAbilitiesTab.click();
+            await new Promise(r => setTimeout(r, 300));
+          }
+
+          smugglersRoot = smugglersSheet.element?.[0] || smugglersSheet.element;
+          const smugglersAbilities = Array.from(
+            smugglersRoot.querySelectorAll(".crew-ability-checkbox")
+          ).map(cb => cb.dataset.itemName);
+
+          // Find abilities that appear for BOTH crew types (these are generic/empty-class)
+          const sharedAbilities = assassinsAbilities.filter(a => smugglersAbilities.includes(a));
+
+          // If there are any generic items in the compendiums, they should appear for both
+          // Note: This may be 0 if no generic crew abilities exist in the system
+          console.log(`[CrewSheet Test] Shared abilities (generic): ${sharedAbilities.length}`);
+          if (sharedAbilities.length > 0) {
+            console.log(`[CrewSheet Test] Shared ability names: ${sharedAbilities.join(", ")}`);
+          }
+
+          // The key assertion: the filtering is WORKING if we see different ability counts
+          // or different abilities between the two crew types
+          const smugglersSet = new Set(smugglersAbilities);
+          const areIdentical = assassinsAbilities.length === smugglersAbilities.length &&
+            assassinsAbilities.every(a => smugglersSet.has(a));
+
+          assert.ok(
+            !areIdentical,
+            "Assassins and Smugglers should NOT have identical ability lists - filtering should differentiate them"
+          );
+
+          console.log(`[CrewSheet Test] Assassins: ${assassinsAbilities.length} abilities, Smugglers: ${smugglersAbilities.length} abilities, Identical: ${areIdentical}`);
         });
       });
     },

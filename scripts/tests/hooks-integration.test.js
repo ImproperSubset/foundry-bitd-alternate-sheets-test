@@ -499,9 +499,10 @@ Hooks.on("quenchReady", (quench) => {
 
           // Click the toggle
           const toggleBtn = root.querySelector(".toggle-alias-display");
-          assert.ok(toggleBtn, "Toggle button should exist on sheet");
+          assert.ok(toggleBtn, "Toggle button (.toggle-alias-display) should exist - check actor-sheet.html identity header");
           toggleBtn.click();
-          await new Promise(r => setTimeout(r, 500));
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise(r => setTimeout(r, 100)); // Small buffer for directory render
 
           // Flag should now be true
           const newFlag = actor.getFlag(TARGET_MODULE_ID, "showAliasInDirectory");
@@ -526,9 +527,10 @@ Hooks.on("quenchReady", (quench) => {
           const root = sheet.element?.[0] || sheet.element;
 
           const toggleBtn = root.querySelector(".toggle-alias-display");
-          assert.ok(toggleBtn, "Toggle button should exist");
+          assert.ok(toggleBtn, "Toggle button (.toggle-alias-display) should exist - check actor-sheet.html identity header");
           toggleBtn.click();
-          await new Promise(r => setTimeout(r, 500));
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise(r => setTimeout(r, 100)); // Small buffer for directory render
 
           // Query the sidebar for this actor's displayed name
           const directory = game.actors.directory;
@@ -559,7 +561,8 @@ Hooks.on("quenchReady", (quench) => {
           const toggleBtnAfter = rootAfterToggle.querySelector(".toggle-alias-display");
           assert.ok(toggleBtnAfter, "Toggle button should still exist after first toggle");
           toggleBtnAfter.click();
-          await new Promise(r => setTimeout(r, 800));
+          await waitForActorUpdate(actor, { timeoutMs: 2000 }).catch(() => {});
+          await new Promise(r => setTimeout(r, 100)); // Small buffer for directory render
 
           // Verify flag actually toggled
           const flagAfterSecondClick = actor.getFlag(TARGET_MODULE_ID, "showAliasInDirectory");
