@@ -880,6 +880,13 @@ export function isTargetModuleActive() {
  * Handles both V1 apps in ui.windows and V2 DialogV2 native <dialog> elements.
  */
 export async function closeAllDialogs() {
+  // Helper to wrap promises with timeout to prevent hanging
+  const withTimeout = (promise, ms = 500) =>
+    Promise.race([
+      promise,
+      new Promise((resolve) => setTimeout(resolve, ms)),
+    ]);
+
   // Get V13+ namespaced classes to avoid deprecation warnings
   const ActorSheetClass = getActorSheetClass();
   const ItemSheetClass = getItemSheetClass();
@@ -888,7 +895,7 @@ export async function closeAllDialogs() {
   for (const app of Object.values(ui.windows)) {
     if (app.rendered && !(app instanceof ActorSheetClass) && !(app instanceof ItemSheetClass)) {
       try {
-        await app.close();
+        await withTimeout(app.close(), 500);
       } catch {
         // Ignore errors
       }
@@ -906,7 +913,7 @@ export async function closeAllDialogs() {
       // Only close DialogV2 instances
       if (!(app instanceof DialogV2Class)) continue;
       try {
-        await app.close();
+        await withTimeout(app.close(), 500);
       } catch {
         // Ignore errors
       }

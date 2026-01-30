@@ -417,11 +417,12 @@ Hooks.on("quenchReady", (quench) => {
 
           // Set notes with a placeholder clock reference
           // (This won't trigger the hook since no actual clock exists)
-          await actor.setFlag(TARGET_MODULE_ID, "notes", "Test notes with clock reference");
+          // Notes are now stored in system.description (not flags)
+          await actor.update({ "system.description": "Test notes with clock reference" });
           await new Promise(r => setTimeout(r, 200));
 
           // Verify no errors occurred
-          const notes = await actor.getFlag(TARGET_MODULE_ID, "notes");
+          const notes = actor.system.description;
           assert.ok(notes, "Notes should be set successfully");
         });
       });
@@ -465,6 +466,115 @@ Hooks.on("quenchReady", (quench) => {
 
           // Verify sheet rendered without errors
           assert.ok(root, "Sheet should render without errors after setting notes");
+        });
+      });
+
+      t.section("renderActorDirectory Hook - Alias Toggle", () => {
+        let actor;
+
+        beforeEach(async function () {
+          this.timeout(10000);
+          const result = await createTestActor({
+            name: "AliasDirectory-Toggle-Test",
+            playbookName: "Cutter"
+          });
+          actor = result.actor;
+        });
+
+        afterEach(async function () {
+          this.timeout(5000);
+          await testCleanup({ actors: [actor] });
+          actor = null;
+        });
+
+        t.test("clicking toggle-alias-display toggles showAliasInDirectory flag", async function () {
+          this.timeout(10000);
+
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          // Initial state should be false/undefined
+          const initialFlag = actor.getFlag(TARGET_MODULE_ID, "showAliasInDirectory");
+          assert.ok(!initialFlag, "showAliasInDirectory should initially be falsy");
+
+          // Click the toggle
+          const toggleBtn = root.querySelector(".toggle-alias-display");
+          assert.ok(toggleBtn, "Toggle button should exist on sheet");
+          toggleBtn.click();
+          await new Promise(r => setTimeout(r, 500));
+
+          // Flag should now be true
+          const newFlag = actor.getFlag(TARGET_MODULE_ID, "showAliasInDirectory");
+          assert.strictEqual(newFlag, true, "showAliasInDirectory should be true after toggle");
+        });
+
+        t.test("toggling alias updates displayed name in Actor Directory", async function () {
+          this.timeout(15000);
+
+          const testName = "AliasDir-Name-Test";
+          const testAlias = "Secret Identity";
+
+          // Set both name and alias
+          await actor.update({
+            name: testName,
+            "system.alias": testAlias
+          });
+          await new Promise(r => setTimeout(r, 300));
+
+          // Open sheet and toggle alias display ON
+          const sheet = await ensureSheet(actor);
+          const root = sheet.element?.[0] || sheet.element;
+
+          const toggleBtn = root.querySelector(".toggle-alias-display");
+          assert.ok(toggleBtn, "Toggle button should exist");
+          toggleBtn.click();
+          await new Promise(r => setTimeout(r, 500));
+
+          // Query the sidebar for this actor's displayed name
+          const directory = game.actors.directory;
+          const dirElement = directory.element?.[0] || directory.element || directory._element?.[0];
+          assert.ok(dirElement, "Actor directory element should exist");
+
+          // V12 vs V13 selector
+          const isV13 = parseInt(game.version.split(".")[0]) >= 13;
+          const selector = isV13
+            ? `[data-entry-id="${actor.id}"] .entry-name`
+            : `[data-document-id="${actor.id}"] .document-name.entry-name`;
+
+          const nameElement = dirElement.querySelector(selector);
+          assert.ok(nameElement, "Actor entry should exist in directory");
+
+          const displayedText = nameElement.textContent.trim();
+          assert.ok(
+            displayedText.includes(testAlias),
+            `Directory should show alias "${testAlias}" but shows "${displayedText}"`
+          );
+
+          // Verify flag is true before second toggle
+          const flagBeforeSecondClick = actor.getFlag(TARGET_MODULE_ID, "showAliasInDirectory");
+          assert.strictEqual(flagBeforeSecondClick, true, "Flag should be true before second click");
+
+          // Toggle OFF - re-query button since sheet may have re-rendered
+          const rootAfterToggle = sheet.element?.[0] || sheet.element;
+          const toggleBtnAfter = rootAfterToggle.querySelector(".toggle-alias-display");
+          assert.ok(toggleBtnAfter, "Toggle button should still exist after first toggle");
+          toggleBtnAfter.click();
+          await new Promise(r => setTimeout(r, 800));
+
+          // Verify flag actually toggled
+          const flagAfterSecondClick = actor.getFlag(TARGET_MODULE_ID, "showAliasInDirectory");
+          assert.strictEqual(flagAfterSecondClick, false, "Flag should be false after second click");
+
+          // Re-query directory element in case it was replaced
+          const dirElementAfter = directory.element?.[0] || directory.element || directory._element?.[0];
+          const nameElementAfter = dirElementAfter.querySelector(selector);
+          assert.ok(nameElementAfter, "Actor entry should still exist in directory after second toggle");
+
+          const displayedAfter = nameElementAfter.textContent.trim();
+          assert.ok(
+            displayedAfter.includes(testName),
+            `Directory should show name "${testName}" but shows "${displayedAfter}"`
+          );
         });
       });
     },
