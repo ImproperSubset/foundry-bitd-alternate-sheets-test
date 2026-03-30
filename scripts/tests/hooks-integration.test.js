@@ -12,6 +12,7 @@ import {
   testCleanup,
   TestNumberer,
   assertExists,
+  getEquippedItems,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -28,14 +29,6 @@ function getAbilityProgress(actor) {
   return actor.getFlag(TARGET_MODULE_ID, "multiAbilityProgress");
 }
 
-/**
- * Get equipped-items flag from actor.
- * @param {Actor} actor
- * @returns {object}
- */
-function getEquippedItems(actor) {
-  return actor.getFlag(TARGET_MODULE_ID, "equipped-items") || {};
-}
 
 Hooks.on("quenchReady", (quench) => {
   if (!isTargetModuleActive()) {

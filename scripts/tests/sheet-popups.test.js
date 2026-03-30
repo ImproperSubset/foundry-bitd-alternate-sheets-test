@@ -11,6 +11,7 @@ import {
   testCleanup,
   TestNumberer,
   assertExists,
+  getEquippedItems,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -75,14 +76,6 @@ function isItemSelected(itemEl) {
   return checkbox?.checked || false;
 }
 
-/**
- * Get the equipped-items flag from actor.
- * @param {Actor} actor
- * @returns {object}
- */
-function getEquippedItems(actor) {
-  return actor.getFlag(TARGET_MODULE_ID, "equipped-items") || {};
-}
 
 /**
  * Trigger a mousedown event on a label using the sheet's jQuery context.

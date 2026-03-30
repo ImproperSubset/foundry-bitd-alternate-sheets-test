@@ -62,6 +62,7 @@
     "scripts/tests/hooks-integration.test.js",
     "scripts/tests/handlebars-helpers.test.js",
     "scripts/tests/smart-field-custom-text.test.js",
-    "scripts/tests/clear-load-button.test.js"
+    "scripts/tests/clear-load-button.test.js",
+    "scripts/tests/zero-load-items.test.js"
   ]
 }

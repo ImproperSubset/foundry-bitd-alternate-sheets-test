@@ -10,6 +10,8 @@ import {
   testCleanup,
   closeAllDialogs,
   TestNumberer,
+  getItemLoad,
+  makeEquippedEntry,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -391,8 +393,8 @@ Hooks.on("quenchReady", (quench) => {
           const item2 = itemBlocks[1];
           const item1Id = item1.dataset.itemId;
           const item2Id = item2.dataset.itemId;
-          const item1Load = parseInt(item1.dataset.itemLoad) || 1;
-          const item2Load = parseInt(item2.dataset.itemLoad) || 1;
+          const item1Load = getItemLoad(item1);
+          const item2Load = getItemLoad(item2);
           const expectedLoad = item1Load + item2Load;
 
           assert.ok(item1Id, "First item must have a valid ID");
@@ -400,8 +402,8 @@ Hooks.on("quenchReady", (quench) => {
 
           // Equip these real items by setting the flag
           await actor.setFlag(TARGET_MODULE_ID, "equipped-items", {
-            [item1Id]: { id: item1Id, load: item1Load, name: "Item 1", progress: item1Load },
-            [item2Id]: { id: item2Id, load: item2Load, name: "Item 2", progress: item2Load }
+            [item1Id]: makeEquippedEntry(item1Id, item1Load, "Item 1"),
+            [item2Id]: makeEquippedEntry(item2Id, item2Load, "Item 2"),
           });
           await new Promise(resolve => setTimeout(resolve, 200));
 

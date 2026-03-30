@@ -12,6 +12,7 @@ import {
   TestNumberer,
   assertExists,
   assertNotEmpty,
+  getItemLoad,
 } from "../test-utils.js";
 
 const MODULE_ID = "bitd-alternate-sheets-test";
@@ -101,31 +102,6 @@ function isItemSelected(itemEl) {
 
   // Check data attribute
   return itemEl.dataset?.selected === "true" || itemEl.dataset?.owned === "true";
-}
-
-/**
- * Get item load value.
- * @param {HTMLElement} itemEl
- * @returns {number}
- */
-function getItemLoad(itemEl) {
-  // Template uses data-item-load="{{default item.system.load 1}}"
-  if (itemEl.dataset?.itemLoad) {
-    return parseInt(itemEl.dataset.itemLoad) || 0;
-  }
-
-  // Fallback: check for nested element with load info
-  const loadEl = itemEl.querySelector(".item-load, .load, [data-load], [data-item-load]");
-  if (loadEl) {
-    if (loadEl.dataset?.itemLoad) {
-      return parseInt(loadEl.dataset.itemLoad) || 0;
-    }
-    const text = loadEl.textContent?.trim();
-    const match = text?.match(/(\d+)/);
-    return match ? parseInt(match[1]) : 0;
-  }
-
-  return 0;
 }
 
 const t = new TestNumberer("11");
@@ -1106,9 +1082,9 @@ Hooks.on("quenchReady", (quench) => {
             for (const item of gearItems) {
               if (!isItemSelected(item)) {
                 const checkbox = item.querySelector("input[type='checkbox']");
-                const itemLoad = getItemLoad(item) || 1;
+                const itemLoad = getItemLoad(item);
 
-                if (checkbox && totalEquipped + itemLoad <= maxLoad) {
+                if (checkbox && itemLoad > 0 && totalEquipped + itemLoad <= maxLoad) {
                   const itemName = item.dataset?.itemName || "unknown";
                   console.log(`[LoadPill Test] Equipping "${itemName}" (load ${itemLoad})`);
 
@@ -1216,7 +1192,7 @@ Hooks.on("quenchReady", (quench) => {
             for (const item of gearItems) {
               if (!isItemSelected(item)) {
                 const checkbox = item.querySelector("input[type='checkbox']");
-                const itemLoad = getItemLoad(item) || 1;
+                const itemLoad = getItemLoad(item);
 
                 if (checkbox && itemLoad > 0) {
                   const itemName = item.dataset?.itemName || "unknown";

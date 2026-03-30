@@ -587,6 +587,55 @@ export async function waitForClockInChat(message, maxWaitMs = 5000) {
   return null;
 }
 
+// ============================================================================
+// Equipment & Load Helpers
+// ============================================================================
+
+/**
+ * Get an item's load value from its DOM element.
+ * Returns the actual load (0 for zero-load items, not 1).
+ * @param {HTMLElement} itemEl - The .item-block element
+ * @returns {number}
+ */
+export function getItemLoad(itemEl) {
+  if (itemEl.dataset?.itemLoad !== undefined && itemEl.dataset.itemLoad !== "") {
+    return parseInt(itemEl.dataset.itemLoad) || 0;
+  }
+  const loadEl = itemEl.querySelector("[data-item-load]");
+  if (loadEl?.dataset?.itemLoad !== undefined) {
+    return parseInt(loadEl.dataset.itemLoad) || 0;
+  }
+  return 0;
+}
+
+/**
+ * Get the equipped-items flag from an actor.
+ * @param {Actor} actor
+ * @returns {object}
+ */
+export function getEquippedItems(actor) {
+  return actor.getFlag(TARGET_MODULE_ID, "equipped-items") || {};
+}
+
+/**
+ * Build a correctly-structured equipped-item flag entry.
+ * Uses the actual load value for the load sum and Math.max(load, 1)
+ * for the progress field (so the checkbox renders as checked even
+ * for zero-load items).
+ * @param {string} itemId
+ * @param {number} load - The actual item load (0 for free items)
+ * @param {string} [name=""]
+ * @returns {{ id: string, load: number, name: string, progress: number }}
+ */
+export function makeEquippedEntry(itemId, load, name = "") {
+  return {
+    id: itemId,
+    load,
+    name,
+    progress: Math.max(load, 1),
+  };
+}
+
 /**
  * Find a class/playbook item in compendia.
  * @param {string} playbookName - Optional playbook name to find specifically
